@@ -12,10 +12,10 @@ The brain of the system. A long-running Rust daemon operating on the host machin
 *   **Role:** Acts as the API server and lifecycle manager. It does *not* run as root (Constraint 000).
 *   **Responsibilities:**
     *   **API Gateway:** Receives requests to launch workloads (e.g., "Run a Hermes agent," "Start a browser session").
-    *   **Resource Allocation:** Selects an available IP address, MAC address, and generates unique TAP device names.
+    *   **Resource Allocation & Fencing:** Selects an available IP/MAC, generates TAP names, and assigns strict `cgroup` memory limits and CPU pins (`taskset`) to protect the host (Constraint 005).
     *   **Image Provisioning:** Dynamically creates the `metadata.ext4` drive for secrets and ensures a pristine `rootfs.ext4` is available for the boot (Constraint 002).
     *   **Networking Setup:** Executes the necessary privileged commands (via `sudo` or a privileged helper binary) to create TAP devices and configure declarative `iptables`/`nftables` rules based on the requested Egress Profile (Constraint 004).
-    *   **Firecracker Interfacing:** Launches the `firecracker` binary, configures it via the Unix Domain Socket REST API, and issues the `InstanceStart` command.
+    *   **Firecracker Interfacing:** Launches the `firecracker` binary within the assigned `cgroup`, configures it via the Unix Domain Socket REST API (including I/O rate limiters), and issues the `InstanceStart` command.
     *   **Monitoring & Teardown:** Monitors the VM's lifecycle and gracefully cleans up resources (killing the process, deleting TAP interfaces, wiping metadata drives) upon task completion or timeout.
 
 ### 2. Firecracker MicroVMs (The Compute Nodes)
@@ -40,5 +40,6 @@ A strictly controlled network plane ensuring default-deny isolation.
 
 ## Security Boundary Summary
 1.  **Hardware Layer:** KVM ensures memory and CPU isolation.
-2.  **OS Layer:** Ephemeral RootFS prevents persistent malware. Unprivileged agent execution (Constraint 000) limits damage if the agent breaks out of its immediate process.
-3.  **Network Layer:** Host-level `iptables` rules restrict egress and lateral movement, regardless of what the guest OS attempts to do.
+2.  **Resource Layer:** Host `cgroups` and CPU pinning prevent the mini-cloud from starving the host OS of resources (Constraint 005).
+3.  **OS Layer:** Ephemeral RootFS prevents persistent malware. Unprivileged agent execution (Constraint 000) limits damage if the agent breaks out of its immediate process.
+4.  **Network Layer:** Host-level `iptables` rules restrict egress and lateral movement, regardless of what the guest OS attempts to do.

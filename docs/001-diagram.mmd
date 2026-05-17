@@ -12,20 +12,51 @@ graph TD
 
     %% Host Machine Environment
     subgraph Host[Host Machine - Ubuntu Linux]
-        %% Control Plane
-        subgraph ControlPlane[Rust Orchestrator Daemon]
-            API
-            ResourceAlloc[Resource Allocation]
-            ImageProv[Image Provisioning]
-            NetSetup[Networking Setup]
-            Monitor[Lifecycle & Monitoring]
-            
-            API --> ResourceAlloc
-            API --> ImageProv
-            API --> NetSetup
-            API --> Monitor
+        
+        %% Resource Fencing
+        subgraph CGroup[cgroup v2 / Resource Fenced Slice]
+            direction TB
+            %% Control Plane
+            subgraph ControlPlane[Rust Orchestrator Daemon]
+                API
+                ResourceAlloc[Resource Allocation & Fencing]
+                ImageProv[Image Provisioning]
+                NetSetup[Networking Setup]
+                Monitor[Lifecycle & Monitoring]
+                
+                API --> ResourceAlloc
+                API --> ImageProv
+                API --> NetSetup
+                API --> Monitor
+            end
+            class ControlPlane orchestrator
+
+            %% MicroVM Boundary
+            subgraph MicroVM[Firecracker MicroVM]
+                direction TB
+                FCBinary[Firecracker Process]
+                
+                %% REST API Interaction
+                Monitor -->|Unix Socket REST API| FCBinary
+                
+                %% VM Internals
+                subgraph KVM[KVM Hardware Isolation]
+                    Kernel[Guest Kernel - vmlinux]
+                    GuestInit[Guest Init Process]
+                    Agent[Untrusted Agent / Browser]
+                    GuestEth[Guest eth0]
+                    
+                    Kernel --> GuestInit
+                    GuestInit --> Agent
+                    GuestEth -.->|172.16.0.2| Agent
+                end
+                
+                FCBinary --> KVM
+            end
+            class MicroVM vm
+            class KVM boundary
         end
-        class ControlPlane orchestrator
+        class CGroup boundary
 
         %% Storage Provisioning
         ImageProv -->|Generates| MetaDrive[(metadata.ext4)]
@@ -39,31 +70,6 @@ graph TD
         NetSetup -->|Configures| IPTables{iptables / Egress Profiles}
         
         class TapDev,IPTables network
-
-        %% MicroVM Boundary
-        subgraph MicroVM[Firecracker MicroVM]
-            direction TB
-            FCBinary[Firecracker Process]
-            
-            %% REST API Interaction
-            Monitor -->|Unix Socket REST API| FCBinary
-            
-            %% VM Internals
-            subgraph KVM[KVM Hardware Isolation]
-                Kernel[Guest Kernel - vmlinux]
-                GuestInit[Guest Init Process]
-                Agent[Untrusted Agent / Browser]
-                GuestEth[Guest eth0]
-                
-                Kernel --> GuestInit
-                GuestInit --> Agent
-                GuestEth -.->|172.16.0.2| Agent
-            end
-            
-            FCBinary --> KVM
-        end
-        class MicroVM vm
-        class KVM boundary
 
         %% Connections between Host and Guest
         RootFS ===|/dev/vda - Read Only/Ephemeral| FCBinary
