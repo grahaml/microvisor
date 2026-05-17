@@ -32,6 +32,6 @@ Send an `InstanceStart` action to the `/actions` endpoint to "power on" the micr
 - Shutdown is typically initiated from within the guest (e.g., `reboot` or `poweroff`) or by killing the host Firecracker process.
 
 ## Requirements
-- [ ] A script (`run_vm.sh`) that automates the API calls.
+- [ ] A script (`run-vm.sh`) that automates the API calls.
 - [ ] Proper error handling for failed API responses.
 - [ ] Cleanup logic to ensure the socket is removed on exit.

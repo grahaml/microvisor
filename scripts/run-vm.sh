@@ -28,7 +28,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/boot-source' \
   -H 'Content-Type: application/json' \
   -d "{
         \"kernel_image_path\": \"$KERNEL\",
-        \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off\"
+        \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off rw init=/usr/local/bin/init-hermes.sh\"
     }"
 
 # 4. Root Drive

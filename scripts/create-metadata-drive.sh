@@ -10,6 +10,7 @@ if [ -z "$1" ]; then
 fi
 
 API_KEY="$1"
+PROMPT="${2:-}"
 METADATA_FILE="resources/metadata.ext4"
 TEMP_BUILD_DIR=$(mktemp -d)
 
@@ -18,6 +19,11 @@ trap 'rm -rf "$TEMP_BUILD_DIR"' EXIT
 
 echo "Writing secrets to temporary build directory..."
 echo "ANTHROPIC_API_KEY=$API_KEY" > "$TEMP_BUILD_DIR/.env"
+
+if [ -n "$PROMPT" ]; then
+    echo "$PROMPT" > "$TEMP_BUILD_DIR/prompt.txt"
+fi
+
 # Only the owner of the process (you) can read this temp file
 chmod 600 "$TEMP_BUILD_DIR/.env"
 

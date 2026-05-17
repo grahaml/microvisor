@@ -5,18 +5,18 @@ This document defines the host-side shell scripts required to automate the manua
 
 ## Script Registry
 
-### 1. `scripts/build_rootfs.sh`
+### 1. `scripts/build-rootfs.sh`
 - **Purpose:** Automates Phase 2 (Custom RootFS via Docker).
-- **Inputs:** `Dockerfile`, `scripts/guest-init.sh`.
+- **Inputs:** `Dockerfile`, `scripts/init-hermes.sh`.
 - **Outputs:** `resources/rootfs.ext4`.
 - **Logic:**
     1. Build Docker image.
     2. Create empty image file.
     3. Format as ext4.
     4. Export Docker filesystem to image.
-    5. Inject `guest-init.sh` as `/sbin/init` or equivalent.
+    5. Inject `init-hermes.sh` as `/sbin/init` or equivalent.
 
-### 2. `scripts/create_metadata_drive.sh`
+### 2. `scripts/create-metadata-drive.sh`
 - **Purpose:** Automates Phase 3 (Secret Injection).
 - **Inputs:** API Key (via argument).
 - **Outputs:** `resources/metadata.ext4`.
@@ -25,7 +25,7 @@ This document defines the host-side shell scripts required to automate the manua
     2. Format as ext4.
     3. Write `.env` file containing secrets.
 
-### 3. `scripts/setup_network.sh`
+### 3. `scripts/setup-network.sh`
 - **Purpose:** Automates Phase 4 (Host Networking).
 - **Inputs:** None (uses host environment discovery).
 - **Outputs:** Active `tap0` interface, iptables rules.
@@ -35,7 +35,7 @@ This document defines the host-side shell scripts required to automate the manua
     3. Enable sysctl forwarding.
     4. Apply NAT/Masquerade rules.
 
-### 4. `scripts/run_vm.sh`
+### 4. `scripts/run-vm.sh`
 - **Purpose:** Automates Phase 5 (VM Lifecycle).
 - **Inputs:** `resources/vmlinux.bin`, `resources/rootfs.ext4`, `resources/metadata.ext4`.
 - **Outputs:** Running Firecracker process.
