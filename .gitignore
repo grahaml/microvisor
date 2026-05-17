@@ -1,0 +1,12 @@
+# Binaries
+bin/firecracker
+
+# Guest Resources (Kernels, Images, Drives)
+resources/*
+
+# Sockets and Logs
+*.socket
+*.log
+
+# System/Environment
+.env
