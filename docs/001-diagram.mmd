@@ -1,0 +1,83 @@
+graph TD
+    %% Define Styles
+    classDef orchestrator fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef vm fill:#e1f5fe,stroke:#333,stroke-width:2px;
+    classDef storage fill:#fff3e0,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5;
+    classDef network fill:#e8f5e9,stroke:#333,stroke-width:1px;
+    classDef boundary fill:none,stroke:#d32f2f,stroke-width:2px,stroke-dasharray: 10 5;
+
+    %% External Interfaces
+    Client([External Client / System]) -->|API Requests| API[Rust Orchestrator API Gateway]
+    Internet((Public Internet))
+
+    %% Host Machine Environment
+    subgraph Host[Host Machine - Ubuntu Linux]
+        %% Control Plane
+        subgraph ControlPlane[Rust Orchestrator Daemon]
+            API
+            ResourceAlloc[Resource Allocation]
+            ImageProv[Image Provisioning]
+            NetSetup[Networking Setup]
+            Monitor[Lifecycle & Monitoring]
+            
+            API --> ResourceAlloc
+            API --> ImageProv
+            API --> NetSetup
+            API --> Monitor
+        end
+        class ControlPlane orchestrator
+
+        %% Storage Provisioning
+        ImageProv -->|Generates| MetaDrive[(metadata.ext4)]
+        ImageProv -->|Clones/Prepares| RootFS[(rootfs.ext4)]
+        ImageProv -.->|Maps| StateDrive[(state_drive.ext4 - Optional)]
+        
+        class MetaDrive,RootFS,StateDrive storage
+
+        %% Network Provisioning
+        NetSetup -->|Creates| TapDev[TAP Device - tap0]
+        NetSetup -->|Configures| IPTables{iptables / Egress Profiles}
+        
+        class TapDev,IPTables network
+
+        %% MicroVM Boundary
+        subgraph MicroVM[Firecracker MicroVM]
+            direction TB
+            FCBinary[Firecracker Process]
+            
+            %% REST API Interaction
+            Monitor -->|Unix Socket REST API| FCBinary
+            
+            %% VM Internals
+            subgraph KVM[KVM Hardware Isolation]
+                Kernel[Guest Kernel - vmlinux]
+                GuestInit[Guest Init Process]
+                Agent[Untrusted Agent / Browser]
+                GuestEth[Guest eth0]
+                
+                Kernel --> GuestInit
+                GuestInit --> Agent
+                GuestEth -.->|172.16.0.2| Agent
+            end
+            
+            FCBinary --> KVM
+        end
+        class MicroVM vm
+        class KVM boundary
+
+        %% Connections between Host and Guest
+        RootFS ===|/dev/vda - Read Only/Ephemeral| FCBinary
+        MetaDrive ===|/dev/vdb - Secrets| FCBinary
+        StateDrive ===|/dev/vdc - Persistent User Data| FCBinary
+        
+        TapDev ===|Virtual Cable| GuestEth
+        TapDev -->|172.16.0.1 Gateway| IPTables
+    end
+
+    %% Egress Routing
+    IPTables -->|Profile B: NAT / Proxy allowed| Internet
+    IPTables -.-x|Profile A: Default Deny| Internet
+    IPTables -->|Profile A: Specific APIs allowed| API_Endpoint((Anthropic API))
+
+    %% Lateral Movement Block
+    IPTables -.-x|Blocked Lateral Movement| OtherVMs[Other MicroVM TAP Devices]
