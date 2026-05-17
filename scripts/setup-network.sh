@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+# Hardened Network Setup
 set -e
 
-PROFILE=${1:-"strict"} # Default to strict profile
+PROFILE=${1:-"strict"}
 
 if [[ "$PROFILE" != "strict" && "$PROFILE" != "browser" ]]; then
     echo "[-] Error: Profile must be 'strict' or 'browser'" >&2
@@ -37,63 +38,52 @@ sudo ip link set dev "$TAP_DEV" up
 echo "[*] Enabling IPv4 forwarding..."
 sudo sysctl -w net.ipv4.ip_forward=1 > /dev/null
 
-echo "[*] Flushing old rules for $TAP_DEV..."
-# Clean slate for our specific TAP device
-sudo iptables -D FORWARD -i "$TAP_DEV" -j ACCEPT 2>/dev/null || true
-sudo iptables -D FORWARD -i "$TAP_DEV" -o "$PRIMARY_IFACE" -j ACCEPT 2>/dev/null || true
+echo "[*] Configuring iptables (Default DROP)..."
+# Set default FORWARD policy to DROP
+sudo iptables -P FORWARD DROP
+
+# Flush existing rules for this TAP to avoid accumulation
+sudo iptables -F FORWARD 2>/dev/null || true
 
 echo "[*] Configuring Base NAT (Masquerade)..."
 if ! sudo iptables -t nat -C POSTROUTING -o "$PRIMARY_IFACE" -j MASQUERADE 2>/dev/null; then
     sudo iptables -t nat -A POSTROUTING -o "$PRIMARY_IFACE" -j MASQUERADE
 fi
 
-echo "[*] Applying SSRF Protection..."
-# Explicitly drop traffic trying to reach private ranges or cloud metadata from the VM
+echo "[*] Applying SSRF and Host Protection..."
+# 1. Allow DNS queries to the gateway
+sudo iptables -A FORWARD -i "$TAP_DEV" -d "$TAP_IP" -p udp --dport 53 -j ACCEPT
+
+# 2. Block ALL other traffic to the host machine
+sudo iptables -A FORWARD -i "$TAP_DEV" -d "$TAP_IP" -j REJECT
+
+# 3. Block all other private and metadata ranges
 for DROP_CIDR in "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "169.254.169.254/32"; do
-    # Allow traffic specifically to the Gateway IP so DNS/routing works
-    if ! sudo iptables -C FORWARD -i "$TAP_DEV" -d "$TAP_IP" -j ACCEPT 2>/dev/null; then
-        sudo iptables -I FORWARD 1 -i "$TAP_DEV" -d "$TAP_IP" -j ACCEPT
-    fi
-    # Block everything else in the private ranges
-    if ! sudo iptables -C FORWARD -i "$TAP_DEV" -d "$DROP_CIDR" -j DROP 2>/dev/null; then
-        sudo iptables -A FORWARD -i "$TAP_DEV" -d "$DROP_CIDR" -j DROP
+    if ! sudo iptables -C FORWARD -i "$TAP_DEV" -d "$DROP_CIDR" -j REJECT 2>/dev/null; then
+        sudo iptables -A FORWARD -i "$TAP_DEV" -d "$DROP_CIDR" -j REJECT
     fi
 done
 
 echo "[*] Applying Egress Profile: $PROFILE..."
 
 if [ "$PROFILE" == "strict" ]; then
-    # Strict Profile: Allow only established connections and outbound HTTPS to specific API IPs
-    # Note: Resolving api.anthropic.com here is a slight hack for the shell script POC. 
-    # In Rust, we would use an explicit IP allowlist or an egress proxy.
+    # Strict Profile: Allow only established connections and outbound HTTPS to Anthropic
     API_IP=$(dig +short api.anthropic.com | head -n1)
     
     if [ -n "$API_IP" ]; then
-        if ! sudo iptables -C FORWARD -i "$TAP_DEV" -d "$API_IP" -p tcp --dport 443 -j ACCEPT 2>/dev/null; then
-            sudo iptables -A FORWARD -i "$TAP_DEV" -d "$API_IP" -p tcp --dport 443 -j ACCEPT
-        fi
+        sudo iptables -A FORWARD -i "$TAP_DEV" -d "$API_IP" -p tcp --dport 443 -j ACCEPT
         echo "[+] Strict rules applied (Allowed IP: $API_IP:443)"
     else
-        echo "[-] Warning: Could not resolve Anthropic API. Egress is fully blocked."
+        echo "[-] Warning: Could not resolve Anthropic API. Egress is heavily restricted."
     fi
-
-    # Explicit default deny for this TAP interface
-    sudo iptables -A FORWARD -i "$TAP_DEV" -j REJECT
 
 elif [ "$PROFILE" == "browser" ]; then
     # Browser Profile: Allow arbitrary 80/443 traffic (SSRF rules above protect us)
-    if ! sudo iptables -C FORWARD -i "$TAP_DEV" -o "$PRIMARY_IFACE" -p tcp -m multiport --dports 80,443 -j ACCEPT 2>/dev/null; then
-        sudo iptables -A FORWARD -i "$TAP_DEV" -o "$PRIMARY_IFACE" -p tcp -m multiport --dports 80,443 -j ACCEPT
-    fi
+    sudo iptables -A FORWARD -i "$TAP_DEV" -o "$PRIMARY_IFACE" -p tcp -m multiport --dports 80,443 -j ACCEPT
     echo "[+] Browser rules applied (Allowed ports 80/443)"
-    
-    # Explicit default deny for anything else (e.g. SMTP, SSH)
-    sudo iptables -A FORWARD -i "$TAP_DEV" -j REJECT
 fi
 
-# Always allow return traffic
-if ! sudo iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null; then
-    sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-fi
+# Always allow return traffic for established connections
+sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
-echo "[+] Network setup successfully completed!"
+echo "[+] Hardened network setup complete."
