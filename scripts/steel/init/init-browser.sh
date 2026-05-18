@@ -30,8 +30,15 @@ ip route add default via 172.16.0.1
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 echo "Init complete. Starting Steel Browser..."
+node -v
+npm -v
 
 # 7. Drop Privileges and Execute Steel Browser
 # We use 'tini' to handle signal forwarding and zombie reaping
-# The Steel API usually runs on port 3000
-exec runuser -l browser_user -c "export STEEL_API_KEY=\"$STEEL_API_KEY\"; cd /opt/steel-browser; exec tini -- npm start"
+if [ -z "$STEEL_API_KEY" ]; then
+    echo "[!] Starting Steel Browser in LOCAL mode (no API key required)."
+    exec runuser -l browser_user -c "cd /opt/steel-browser; exec tini -s -- npm start -w api"
+else
+    echo "[+] Starting Steel Browser with provided API key."
+    exec runuser -l browser_user -c "export STEEL_API_KEY=\"$STEEL_API_KEY\"; cd /opt/steel-browser; exec tini -s -- npm start -w api"
+fi
