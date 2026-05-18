@@ -4,13 +4,13 @@ set -e
 # build-rootfs.sh (Steel Browser - Debootstrap version)
 # This script builds a minimal Debian rootfs for Steel Browser without using Docker.
 
-ROOTFS_FILE="../../resources/browser-rootfs.ext4"
+ROOTFS_FILE="../../../resources/browser-rootfs.ext4"
 SIZE_MB=3072 # 3GB to accommodate Chromium and Node.js
 DISTRO="bookworm"
 TEMP_DIR=$(mktemp -d)
 
 echo "[*] Ensuring resources directory exists..."
-mkdir -p ../../resources
+mkdir -p ../../../resources
 
 # Ensure we cleanup on exit
 trap 'sudo umount $TEMP_DIR/mnt 2>/dev/null || true; sudo rm -rf $TEMP_DIR' EXIT
@@ -80,7 +80,7 @@ rm -rf /var/lib/apt/lists/*
 EOF
 
 echo "[4/5] Injecting init script..."
-sudo cp init-browser.sh $TEMP_DIR/mnt/usr/local/bin/init-browser.sh
+sudo cp ../init/init-browser.sh $TEMP_DIR/mnt/usr/local/bin/init-browser.sh
 sudo chmod +x $TEMP_DIR/mnt/usr/local/bin/init-browser.sh
 
 echo "[5/5] Finalizing image..."

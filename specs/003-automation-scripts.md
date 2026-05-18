@@ -17,10 +17,14 @@ Automation for the Python-based agent prototype.
 ### 2. Steel Browser (`scripts/steel/`)
 Automation for the high-density browser isolation prototype.
 
-*   **`build-rootfs.sh`**: Direct debootstrap construction with Chromium/Node.js.
+*   **`build/`**: Contains distribution-specific rootfs providers.
+    *   `debian.sh`: Debootstrap-based construction.
+    *   `alpine.sh`: APK-based construction (musl).
+    *   `wolfi.sh`: Apko-based construction.
 *   **`create-metadata-drive.sh`**: Injects Steel API keys.
-*   **`init-browser.sh`**: Guest PID 1 for starting the Steel API server.
-*   **`run-vm.sh`**: High-performance launch (2 vCPUs, 1024MB RAM, `virtio-rng`).
+*   **`init-browser.sh`**: Universal guest PID 1 template.
+*   **`bench/latency-test.sh`**: Measures boot-to-ready latency across distros.
+*   **`run-vm.sh`**: Unified launch script with `--distro` support and `virtio-rng`.
 
 ## Error Handling & Logging
 - Each script must use `set -e` for fail-fast behavior.

@@ -15,12 +15,14 @@ The goal is to deeply understand and implement a bare-metal orchestrator that pr
 ## 🏗️ Architectural Patterns
 *   **Rust Control Plane:** The target orchestrator is a non-blocking Rust runtime (`tokio`) interacting directly with `/dev/kvm` and `ioctl` boundaries.
 *   **Mission Packages:** Inject secrets and tasks via ephemeral `ext4` metadata drives (`/dev/vdb`) at boot.
-*   **Init System:** Custom bash init scripts as PID 1 to handle pseudofs mounting, secret loading, and privilege dropping.
+*   **Multi-Distro RootFS:** We treat the Base OS as a pluggable component (Debian, Alpine, Wolfi) to benchmark latency and resource density.
 *   **Memory Optimization:** Use NUMA-local pinning and either eager pre-faulting (`MADV_WILLNEED`) or `userfaultfd` for deterministic resume latencies.
 
 ## 📂 Project Structure
 *   `scripts/hermes/`: AI Agent automation (Python guest).
-*   `scripts/steel/`: Browser isolation infrastructure (Node.js/Chromium guest).
+*   `scripts/steel/`: Browser isolation infrastructure.
+    *   `build/`: Distro-specific rootfs providers (Debian, Alpine, Wolfi).
+    *   `bench/`: Latency and performance benchmarking suite.
 *   `ADRs/`: Formal Architecture Decision Records.
 *   `specs/`: Component-level technical specifications.
 *   `constraints/`: Enforced security and resource fencing rules.
@@ -29,7 +31,7 @@ The goal is to deeply understand and implement a bare-metal orchestrator that pr
 *   **Hypervisor:** Firecracker (KVM)
 *   **Control Plane:** Rust (Target), Bash (Prototype)
 *   **Linux Primitives:** eBPF, cgroups v2, Device Mapper, NUMA, KVM ioctls.
-*   **Guest OS:** Debian Bookworm (via debootstrap).
+*   **Guest OS:** Modular (Debian, Alpine, Wolfi).
 
 ## ⚠️ Workflow Rules
 *   **Consult the Specs:** Always check `specs/`, `constraints/`, and `docs/0002-mini-aws.md` before proposing changes.
