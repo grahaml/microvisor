@@ -10,3 +10,8 @@ resources/*
 
 # System/Environment
 .env
+
+# Rust / Cargo
+target/
+**/*.rs.bk
+Cargo.lock

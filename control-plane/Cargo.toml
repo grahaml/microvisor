@@ -1,0 +1,17 @@
+[package]
+name = "control-plane"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+kvm-bindings = "0.14.0"
+kvm-ioctls = "0.24.0"
+libc = "0.2.186"
+nix = "0.31.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tokio = { version = "1.52.3", features = ["full"] }
+vmm-sys-util = "0.15.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
