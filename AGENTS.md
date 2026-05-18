@@ -37,3 +37,4 @@ The goal is to deeply understand and implement a bare-metal orchestrator that pr
 *   **Consult the Specs:** Always check `specs/`, `constraints/`, and `docs/0002-microvisor.md` before proposing changes.
 *   **Performance First:** Avoid heavy CLI wrappers (e.g., `ip`, `dmsetup`) in final designs; prefer direct syscalls/ioctls where possible.
 *   **Verify in Sandbox:** Every change to init scripts or rootfs requires a rebuild and test launch in the current prototype scripts.
+*   **Captain's Log:** At the end of every session, create a short summary entry in `captains-log/YYMMDD-HHMM.md` capturing achievements, technical decisions, and pending tasks. Update the project history to ensure seamless handoffs.
