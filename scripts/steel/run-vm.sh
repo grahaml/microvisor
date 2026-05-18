@@ -30,7 +30,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/boot-source' \
   -H 'Content-Type: application/json' \
   -d "{
         \"kernel_image_path\": \"$KERNEL\",
-        \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off rw init=/usr/local/bin/init-browser.sh\"
+        \"boot_args\": \"console=ttyS0 reboot=k panic=1 pci=off rw root=/dev/vda init=/usr/local/bin/init-browser.sh\"
     }"
 
 # 4. Machine Config (Higher specs for browser)
@@ -39,7 +39,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/machine-config' \
   -d '{
         "vcpu_count": 2,
         "mem_size_mib": 1024,
-        "ht_enabled": false
+        "smt": false
     }'
 
 # 5. Root Drive
