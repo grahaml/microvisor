@@ -1,7 +1,7 @@
 # Spec 005: Multi-Distro Browser Isolation & Benchmarking
 
 ## 1. Overview
-This specification defines a modular architecture for building and benchmarking Steel Browser rootfs images across multiple Linux distributions. The goal is to determine the optimal balance between boot latency, compatibility, and resource density for the "Mini-AWS" orchestrator.
+This specification defines a modular architecture for building and benchmarking Steel Browser rootfs images across multiple Linux distributions. The goal is to determine the optimal balance between boot latency, compatibility, and resource density for the "Microvisor" orchestrator.
 
 ## 2. Workspace Restructuring
 To support multiple distributions, the `scripts/steel/` directory will follow a modular provider pattern:
@@ -40,7 +40,7 @@ The initialization process must be standardized across distributions to ensure b
 5. **Direct Exec**: Execute the Steel API server directly (avoiding heavy shell wrappers where possible).
 
 ## 5. VM Launch & Hardware Fencing
-The launch script must enforce the following "Mini-AWS" resource constraints:
+The launch script must enforce the following "Microvisor" resource constraints:
 - **Entropy**: `virtio-rng` device is MANDATORY.
 - **CPU**: 2 vCPUs pinned to host physical cores (if orchestrator supports it).
 - **Memory**: 1024MB RAM, pinned to local NUMA node.

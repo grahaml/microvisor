@@ -1,4 +1,4 @@
-# Firecracker Hermes Infrastructure
+# Microvisor Orchestrator
 
 > **AI Agents:** Please read [AGENTS.md](./AGENTS.md) for core security mandates and architectural patterns before making changes.
 
@@ -12,7 +12,7 @@ This project serves as the foundation for a custom agent infrastructure. We have
 - `resources/`: Contains the guest kernel, rootfs images, and metadata drives (git-ignored).
 - `scripts/hermes/`: Automation for the Hermes AI agent (Docker-based).
 - `scripts/steel/`: Automation for Steel Browser isolation (Debootstrap-based).
-- `ADRs/`: Architecture Decision Records for the Mini-AWS orchestrator.
+- `ADRs/`: Architecture Decision Records for the Microvisor orchestrator.
 - `specs/`: Detailed technical specifications for every component.
 - `constraints/`: Enforced security and resource fencing rules.
 

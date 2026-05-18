@@ -1,4 +1,4 @@
-# Architectural Specification: Bare-Metal MicroVM Orchestrator ("Mini-AWS")
+# Architectural Specification: Bare-Metal MicroVM Orchestrator ("Microvisor")
 
 This document outlines the low-level technical design for a high-density, ultra-low latency private cloud orchestration plane using Rust, Firecracker, and native Linux kernel primitives.
 

@@ -1,9 +1,9 @@
-# AI Agent Instructions: Mini-AWS Orchestrator
+# AI Agent Instructions: Microvisor
 
-You are an AI engineer assisting in the development of a high-density, ultra-low latency private cloud orchestration plane ("Mini-AWS"). This project uses Rust, Firecracker, and native Linux kernel primitives to treat the host as a programmable hardware multiplexer.
+You are an AI engineer assisting in the development of a high-density, ultra-low latency private cloud orchestration plane ("Microvisor"). This project uses Rust, Firecracker, and native Linux kernel primitives to treat the host as a programmable hardware multiplexer.
 
 ## 🎯 Project Vision
-The goal is to deeply understand and implement a bare-metal orchestrator that provides hardware-enforced isolation with "Layer 1" performance. While currently prototyping with Hermes and Steel Browser, every architectural decision must move toward the "Mini-AWS" spec (`docs/0002-mini-aws.md`).
+The goal is to deeply understand and implement a bare-metal orchestrator that provides hardware-enforced isolation with "Layer 1" performance. While currently prototyping with Hermes and Steel Browser, every architectural decision must move toward the "Microvisor" spec (`docs/0002-microvisor.md`).
 
 ## 🛡️ Core Mandates (Non-Negotiable)
 1.  **Hardware Isolation:** 1:1 mapping of guest microVMs to host processes. 1:1 mapping of vCPUs to physical pthreads.
@@ -27,13 +27,13 @@ The goal is to deeply understand and implement a bare-metal orchestrator that pr
 *   `specs/`: Component-level technical specifications.
 *   `constraints/`: Enforced security and resource fencing rules.
 
-## 🛠️ Tech Stack (The "Mini-AWS" Toolkit)
+## 🛠️ Tech Stack (The "Microvisor" Toolkit)
 *   **Hypervisor:** Firecracker (KVM)
 *   **Control Plane:** Rust (Target), Bash (Prototype)
 *   **Linux Primitives:** eBPF, cgroups v2, Device Mapper, NUMA, KVM ioctls.
 *   **Guest OS:** Modular (Debian, Alpine, Wolfi).
 
 ## ⚠️ Workflow Rules
-*   **Consult the Specs:** Always check `specs/`, `constraints/`, and `docs/0002-mini-aws.md` before proposing changes.
+*   **Consult the Specs:** Always check `specs/`, `constraints/`, and `docs/0002-microvisor.md` before proposing changes.
 *   **Performance First:** Avoid heavy CLI wrappers (e.g., `ip`, `dmsetup`) in final designs; prefer direct syscalls/ioctls where possible.
 *   **Verify in Sandbox:** Every change to init scripts or rootfs requires a rebuild and test launch in the current prototype scripts.
