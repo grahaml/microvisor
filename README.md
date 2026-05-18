@@ -1,5 +1,7 @@
 # Firecracker Hermes Infrastructure
 
+> **AI Agents:** Please read [AGENTS.md](./AGENTS.md) for core security mandates and architectural patterns before making changes.
+
 A high-security, bare-metal-like isolation layer for AI agents using Firecracker microVMs. This project replaces k3s-based sandboxing with dedicated kernels and hardware-enforced isolation.
 
 ## Background & Motivation
@@ -8,17 +10,22 @@ This project serves as the foundation for a custom agent infrastructure. We have
 ## Project Structure
 - `bin/`: Contains the Firecracker binary (git-ignored).
 - `resources/`: Contains the guest kernel, rootfs images, and metadata drives (git-ignored).
-- `scripts/`: Automation scripts for building images and launching VMs.
+- `scripts/hermes/`: Automation for the Hermes AI agent (Docker-based).
+- `scripts/steel/`: Automation for Steel Browser isolation (Debootstrap-based).
+- `ADRs/`: Architecture Decision Records for the Mini-AWS orchestrator.
+- `specs/`: Detailed technical specifications for every component.
+- `constraints/`: Enforced security and resource fencing rules.
 
 ## Setup Progress
 - [x] Phase 1: Workspace & Tooling Setup
-- [ ] Phase 2: Custom RootFS via Docker
-- [ ] Phase 3: Secure Metadata Drive
-- [ ] Phase 4: Host Network Configuration
-- [ ] Phase 5: Firecracker Launch Script
+- [x] Phase 2: Custom RootFS (Hermes & Steel)
+- [x] Phase 3: Secure Metadata Injection
+- [x] Phase 4: Host Network Configuration
+- [x] Phase 5: Firecracker Launch Automation (Multi-Profile)
 
 ## Prerequisites
 - Linux Host (Ubuntu 24.04 recommended)
 - KVM support enabled
-- Docker (for building the rootfs)
-- Python 3 & pip (inside the guest VM)
+- `debootstrap` (for Steel Browser image)
+- Docker (for Hermes image)
+- Python 3 & Node.js (inside respective guest VMs)
