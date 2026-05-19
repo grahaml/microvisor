@@ -8,7 +8,6 @@ use std::process::{Command, Child};
 use std::io;
 use std::path::PathBuf;
 use tracing::{instrument, info};
-use rand::Rng;
 use self::cgroup::{VmCgroup, CgroupManager};
 use self::storage::StorageManager;
 use self::network::{IpAm, TapDevice, EbpfProgram};
@@ -55,10 +54,6 @@ impl Orchestrator {
             ipam: IpAm::new(base_ip),
             firecracker_path: firecracker_path.to_string(),
         })
-    }
-
-    pub fn generate_session_id() -> u64 {
-        rand::rng().random()
     }
 
     #[instrument(skip(self), fields(session_id = %config.session_id, vm_id = %config.id))]

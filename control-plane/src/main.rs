@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn test_state_machine_transitions() {
-        let mut sm = VmStateMachine::new(12345);
+        let mut sm = VmStateMachine::new(vmm::observability::generate_session_id());
         assert_eq!(sm.current_state(), VmState::Pending);
 
         sm.transition_to(VmState::ProvisioningStorage).unwrap();

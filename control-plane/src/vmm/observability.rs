@@ -2,7 +2,13 @@ use std::io;
 use std::path::Path;
 use std::time::Instant;
 use std::os::unix::fs::MetadataExt;
-use tracing::warn;
+use tracing::{warn, Span};
+use rand::Rng;
+use tokio::task::JoinHandle;
+
+pub fn generate_session_id() -> u64 {
+    rand::rng().random()
+}
 
 pub struct SyscallAuditor;
 
@@ -24,6 +30,46 @@ impl SyscallAuditor {
         }
         
         result
+    }
+
+    /// Spawns a blocking task on the tokio thread pool and audits its execution time.
+    /// If it exceeds 1ms, a warning is logged.
+    pub async fn spawn_blocking<F, R>(name: &'static str, f: F) -> io::Result<R>
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        let span = Span::current();
+        let handle: JoinHandle<R> = tokio::task::spawn_blocking(move || {
+            let _enter = span.enter();
+            Self::audit(name, f)
+        });
+
+        handle.await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn test_generate_session_id() {
+        let id1 = generate_session_id();
+        let id2 = generate_session_id();
+        assert_ne!(id1, id2);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_blocking_audit() {
+        let result = SyscallAuditor::spawn_blocking("test_task", || {
+            thread::sleep(Duration::from_millis(2));
+            42
+        }).await.unwrap();
+        
+        assert_eq!(result, 42);
     }
 }
 

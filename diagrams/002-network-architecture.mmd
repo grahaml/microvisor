@@ -23,10 +23,10 @@ graph TD
         BPFMap["BPF_MAP_TYPE_ARRAY<br>Maps TAP ID to 10.0.1.X"]
     end
 
-    Orchestrator -->|1. Allocate Ext IP| IPAM
-    Orchestrator -->|2. Create via TUNSETIFF| TAP
-    Orchestrator -->|3. Write IP Mapping| BPFMap
-    Orchestrator -->|4. Attach Classifier| eBPF
+    Orchestrator -->|1: Allocate Ext IP| IPAM
+    Orchestrator -->|2: Create via TUNSETIFF| TAP
+    Orchestrator -->|3: Write IP Mapping| BPFMap
+    Orchestrator -->|4: Attach Classifier| eBPF
 
     GuestOS -->|Tx: Src 169.254.1.2| TAP
     TAP --> eBPF
