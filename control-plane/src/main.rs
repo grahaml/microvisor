@@ -2,14 +2,36 @@ pub mod vmm;
 
 use vmm::Orchestrator;
 use std::io;
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::prelude::*;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry::trace::TracerProvider;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_span_events(FmtSpan::CLOSE)
-        .json()
+    // 1. Configure OTLP Exporter
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint("http://10.0.0.2:4317")
+        .build()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .build();
+
+    let tracer = provider.tracer("microvisor-control-plane");
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    // 2. Configure JSON stdout layer
+    let json_layer = tracing_subscriber::fmt::layer()
+        .json();
+
+    // 3. Register layers
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .with(json_layer)
+        .with(otel_layer)
         .init();
 
     tracing::info!("Microvisor Control Plane starting...");

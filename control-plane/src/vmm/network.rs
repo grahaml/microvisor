@@ -20,6 +20,11 @@ impl IpAm {
 
     #[instrument(skip(self))]
     pub fn allocate(&self) -> io::Result<u32> {
+        self.allocate_dynamic()
+    }
+
+    #[instrument(skip(self))]
+    pub fn allocate_dynamic(&self) -> io::Result<u32> {
         loop {
             let current = self.bits.load(Ordering::SeqCst);
             let first_free = (!current).trailing_zeros();
@@ -29,6 +34,24 @@ impl IpAm {
             let mask = 1 << first_free;
             if self.bits.compare_exchange(current, current | mask, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                 return Ok(self.base_ip + first_free);
+            }
+        }
+    }
+
+    #[instrument(skip(self))]
+    pub fn allocate_static(&self, ip: u32) -> io::Result<u32> {
+        let index = ip - self.base_ip;
+        if index >= 64 {
+            return Err(io::Error::new(io::ErrorKind::Other, "IP out of range"));
+        }
+        let mask = 1 << index;
+        loop {
+            let current = self.bits.load(Ordering::SeqCst);
+            if current & mask != 0 {
+                return Err(io::Error::new(io::ErrorKind::Other, "Static IP already allocated"));
+            }
+            if self.bits.compare_exchange(current, current | mask, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                return Ok(ip);
             }
         }
     }
