@@ -1,31 +1,49 @@
-# Microvisor Orchestrator
+# Microvisor
 
-> **AI Agents:** Please read [AGENTS.md](./AGENTS.md) for core security mandates and architectural patterns before making changes.
+> **AI Agents:** Please read [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for core security mandates and architectural patterns before making changes.
 
-A high-security, bare-metal-like isolation layer for AI agents using Firecracker microVMs. This project replaces k3s-based sandboxing with dedicated kernels and hardware-enforced isolation.
+Microvisor is a high-density, ultra-low latency private cloud orchestration plane. It treats standard Linux hosts as programmable hardware multiplexers, providing hardware-enforced isolation with "Layer 1" performance for ephemeral workloads.
 
-## Background & Motivation
-This project serves as the foundation for a custom agent infrastructure. We have moved away from k3s/Kubernetes to leverage Firecracker microVMs for "Layer 1" isolation. This allows us to spin up autonomous agents (like Hermes) with their own dedicated kernels and filesystems, providing bare-metal performance with hardware-enforced security.
+## 🎯 Project Vision
+The goal is to deliver a bare-metal orchestrator that leverages Firecracker, KVM, and native Linux kernel primitives to achieve deterministic performance and strict multi-tenant isolation.
 
-## Project Structure
-- `bin/`: Contains the Firecracker binary (git-ignored).
-- `resources/`: Contains the guest kernel, rootfs images, and metadata drives (git-ignored).
-- `scripts/hermes/`: Automation for the Hermes AI agent (Docker-based).
-- `scripts/steel/`: Automation for Steel Browser isolation (Debootstrap-based).
-- `ADRs/`: Architecture Decision Records for the Microvisor orchestrator.
-- `specs/`: Detailed technical specifications for every component.
-- `constraints/`: Enforced security and resource fencing rules.
+### Target Latencies
+- **Cold Boot:** < 200 ms
+- **Snapshot Resume:** < 10 ms
+- **vCPU KVM_RUN Re-entry:** < 5 µs
+- **eBPF NAT Overhead:** < 200 ns
 
-## Setup Progress
-- [x] Phase 1: Workspace & Tooling Setup
-- [x] Phase 2: Custom RootFS (Hermes & Steel)
-- [x] Phase 3: Secure Metadata Injection
-- [x] Phase 4: Host Network Configuration
-- [x] Phase 5: Firecracker Launch Automation (Multi-Profile)
+## 🏗️ Core Architecture
+- **Hypervisor:** Firecracker (KVM) launched via the `jailer`.
+- **Control Plane:** Asynchronous Rust daemon built on `tokio`, interacting directly with `/dev/kvm` and `ioctl` boundaries.
+- **Compute Isolation:** 1:1 mapping of guest vCPUs to physical physical cores using cgroups v2 (`cpuset`).
+- **Networking:** Zero-shared-state routing via Point-to-Point TAPs and stateless eBPF NAT rewrites (`tc` hooks). No host bridges.
+- **Storage:** Device Mapper Thin Provisioning (`dm-thin`) for instant CoW snapshots, opened with `O_DIRECT` and submitted via `io_uring`.
 
-## Prerequisites
-- Linux Host (Ubuntu 24.04 recommended)
-- KVM support enabled
-- `debootstrap` (for Steel Browser image)
-- Docker (for Hermes image)
-- Python 3 & Node.js (inside respective guest VMs)
+## 📂 Project Structure
+- `control-plane/`: The Rust orchestrator implementation.
+    - `specs/`: Rust-specific technical specifications (Authoritative).
+    - `src/`: Core logic for VMM management, storage, networking, and observability.
+- `docs/`: Strategic project documentation.
+    - `001-prd.md`: Product Requirements & Operator Stories.
+    - `002-tad.md`: Technical Architecture & Kernel Primitives.
+    - `003-expert-review.md`: SME architectural audit findings.
+- `constraints/`: Formal security and resource-fencing rules.
+- `ADRs/`: Architecture Decision Records capturing key design trade-offs.
+- `captains-log/`: Session-by-session history of technical decisions and progress.
+- `scripts/`: Retired bash prototypes (`hermes`, `steel`) retained for reference.
+- `diagrams/`: Mermaid-based architecture and state machine visualizations.
+- `tests/`: End-to-end and integration tests (e.g., browser verification).
+
+## 🛠️ Tech Stack
+- **Language:** Rust
+- **Runtime:** `tokio`
+- **Virtualization:** Firecracker, KVM
+- **Kernel Primitives:** eBPF (`libbpf-rs`), cgroups v2, Device Mapper, `io_uring`, NUMA.
+- **Guest OS:** Modular (Debian, Alpine, Wolfi).
+
+## 📖 Getting Started
+1. Review the [Product Requirements (PRD)](./docs/001-prd.md) for the "Why".
+2. Read the [Technical Architecture (TAD)](./docs/002-tad.md) for the "How".
+3. Consult the [Control Plane Specs](./control-plane/specs/) for implementation details.
+4. Check [AGENTS.md](./AGENTS.md) if you are an AI assistant.
