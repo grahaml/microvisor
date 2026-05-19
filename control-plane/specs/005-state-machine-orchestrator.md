@@ -35,7 +35,15 @@ The VM lifecycle is managed by a `VmStateMachine` with the following discrete st
 
 ### 2. Syscall Auditing (ADR 005)
 *   Critical boundaries (e.g., writing to `/sys/fs/cgroup/`, creating TAP devices) must be wrapped in a timing span.
-*   **Constraint:** Any blocking operation exceeding 1ms must be logged as a warning to detect `tokio` worker thread starvation.
+*   **Primary defense — wrap, don't just measure:** All known-blocking calls must be executed via `tokio::task::spawn_blocking` (multi-threaded runtime) or `tokio::task::block_in_place` (within a `current_thread` runtime). This includes, at minimum:
+    - Device-mapper `ioctl`s on `/dev/mapper/control` and on pool devices
+    - Reads/writes to `/sys/fs/cgroup/...`
+    - `sched_setaffinity` / `sched_setscheduler` calls
+    - eBPF map updates that may serialize under verifier locks
+    - TAP device creation via `ioctl(TUNSETIFF)`
+
+    Instrumenting these without wrapping them is insufficient — by the time the warning fires, the reactor is already starved.
+*   **Guardrail — measure, don't only wrap:** Any blocking operation exceeding 1ms inside a `spawn_blocking` worker should be logged as a warning so that pathological cases (e.g., a runaway thin-pool extension) are still visible. Additionally enable `tokio::runtime::Builder::enable_metrics_poll_count_histogram()` and alert on slow-poll counts at the runtime level. The 1ms threshold is the floor for **detection**, not the upper bound of acceptable behavior.
 
 ### 3. Always-On Binary Telemetry (ADR 003/004)
 *   The orchestrator will maintain a BPF Hash Map (`vm_session_map`) linking the guest `cgroup_id` to the `session_id`.

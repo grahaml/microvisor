@@ -13,5 +13,5 @@ The microVM environment must provide a high-quality source of entropy to the gue
 *   **Kernel Config:** The guest kernel (`vmlinux.bin`) must have `CONFIG_HW_RANDOM_VIRTIO` enabled to recognize the device.
 
 ## Validation
-*   **Guest Check:** Run `cat /proc/sys/kernel/random/entropy_avail` inside the guest. It should consistently show values above 3000.
-*   **Performance:** Verify that HTTPS requests from within the VM do not experience "first-call" latency spikes during the TLS handshake.
+*   **Guest Check (kernel-init signal):** Confirm `random: crng init done` appears in the guest kernel log (`dmesg`) before user-space starts. On any modern kernel (≥ 5.18, post Jason Donenfeld's RNG overhaul), this is the authoritative signal that the RNG is seeded and non-blocking. Note: `/proc/sys/kernel/random/entropy_avail` is **not** a valid validation signal on modern kernels — it is capped at 256 by design and no longer represents pool depth.
+*   **Performance:** Measure HTTPS handshake p99 from within the guest. The presence of `virtio-rng` should eliminate "first-call" latency spikes during TLS handshakes; that latency, not a synthetic entropy reading, is the metric that matters.
