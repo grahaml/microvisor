@@ -68,7 +68,9 @@ impl Orchestrator {
         sm.transition_to(VmState::ProvisioningStorage)
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e))?;
 
-        let rootfs = self.storage_manager.create_snapshot(&config.base_image, &config.id)
+        // For POC, assume base image internal ID is 1
+        let base_image_id = 1;
+        let rootfs = self.storage_manager.create_snapshot(base_image_id, &config.id).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         
         // 2. Network provisioning (Spec-002)

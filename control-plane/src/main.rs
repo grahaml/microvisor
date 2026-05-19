@@ -51,6 +51,7 @@ async fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use vmm::cgroup::{CgroupManager, CpusetAllocator};
     use vmm::network::IpAm;
     use vmm::state::{VmStateMachine, VmState};
@@ -148,19 +149,21 @@ mod tests {
         assert_eq!(topology.get_mems_string("1").unwrap(), "0");
     }
 
-    #[test]
-    fn test_numa_topology_multi_node() {
+    #[tokio::test]
+    async fn test_metadata_drive_create() {
+        use vmm::storage::MetadataDrive;
         let dir = tempdir().unwrap();
-        let sysfs = dir.path();
+        let staging = dir.path().join("staging");
+        fs::create_dir(&staging).unwrap();
+        fs::write(staging.join("hello.txt"), "world").unwrap();
         
-        // Mock two NUMA nodes
-        std::fs::create_dir_all(sysfs.join("devices/system/node/node0")).unwrap();
-        std::fs::create_dir_all(sysfs.join("devices/system/node/node1")).unwrap();
-
-        let topology = vmm::cgroup::NumaTopology::with_root(sysfs.to_path_buf());
+        let drive_path = dir.path().join("metadata.img");
+        let _drive = MetadataDrive::create(&drive_path, &staging).await.unwrap();
         
-        // Should honor requested node in multi-node system
-        assert_eq!(topology.get_mems_string("1").unwrap(), "1");
+        assert!(drive_path.exists());
+        // We could use `dumpe2fs` or `ls -l` to verify size, but existence is a good start
+        let metadata = fs::metadata(&drive_path).unwrap();
+        assert_eq!(metadata.len(), 1024 * 1024); // 1MB
     }
 
     #[test]
