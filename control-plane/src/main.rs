@@ -2,12 +2,19 @@ pub mod vmm;
 
 use vmm::Orchestrator;
 use std::io;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    println!("Microvisor Control Plane starting...");
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_span_events(FmtSpan::CLOSE)
+        .json()
+        .init();
 
-    let orchestrator = Orchestrator::new(
+    tracing::info!("Microvisor Control Plane starting...");
+
+    let _orchestrator = Orchestrator::new(
         "/sys/fs/cgroup/orchestrator",
         "thin-pool-0",
         0x0A000001, // 10.0.0.1
@@ -24,7 +31,21 @@ mod tests {
     use super::*;
     use vmm::cgroup::CgroupManager;
     use vmm::network::IpAm;
+    use vmm::state::{VmStateMachine, VmState};
     use tempfile::tempdir;
+
+    #[test]
+    fn test_state_machine_transitions() {
+        let mut sm = VmStateMachine::new(12345);
+        assert_eq!(sm.current_state(), VmState::Pending);
+
+        sm.transition_to(VmState::ProvisioningStorage).unwrap();
+        sm.transition_to(VmState::ConfiguringNetwork).unwrap();
+
+        // Test invalid transition
+        let result = sm.transition_to(VmState::Running);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_cgroup_creation() {
@@ -34,6 +55,19 @@ mod tests {
         
         assert!(dir.path().join("vm-test-vm").exists());
         assert!(vm_cgroup.path().exists());
+    }
+
+    #[test]
+    fn test_syscall_auditor() {
+        use vmm::observability::SyscallAuditor;
+        use std::thread;
+        use std::time::Duration;
+
+        SyscallAuditor::audit("fast_call", || {});
+
+        SyscallAuditor::audit("slow_call", || {
+            thread::sleep(Duration::from_millis(2));
+        });
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::io;
+use tracing::{instrument, info};
 
 pub struct IpAm {
     /// Atomic bitset for IP allocation (up to 64 IPs for now)
@@ -17,6 +18,7 @@ impl IpAm {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn allocate(&self) -> io::Result<u32> {
         loop {
             let current = self.bits.load(Ordering::SeqCst);
@@ -31,6 +33,7 @@ impl IpAm {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn release(&self, ip: u32) {
         let index = ip - self.base_ip;
         if index < 64 {
@@ -46,9 +49,10 @@ pub struct TapDevice {
 }
 
 impl TapDevice {
+    #[instrument]
     pub fn create(name: &str) -> io::Result<Self> {
         // ioctl(TUNSETIFF) to /dev/net/tun
-        println!("Creating TAP device {}", name);
+        info!(name, "Creating TAP device");
         Ok(Self {
             name: name.to_string(),
         })
@@ -64,11 +68,12 @@ pub struct EbpfProgram {
 }
 
 impl EbpfProgram {
-    pub fn load_nat_program(_tap_name: &str, _host_ip: u32) -> io::Result<Self> {
+    #[instrument]
+    pub fn load_nat_program(tap_name: &str, host_ip: u32) -> io::Result<Self> {
         // 1. Load eBPF bytecode using bpf() syscall
         // 2. Attach to tc egress/ingress on TAP device
         // 3. Update BPF map with host_ip
-        println!("Loading eBPF NAT program for host IP {}", _host_ip);
+        info!(tap_name, host_ip, "Loading eBPF NAT program");
         Ok(Self {})
     }
 }

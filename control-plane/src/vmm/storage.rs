@@ -1,6 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::fs;
+use tracing::{instrument, info};
 
 pub struct StorageManager {
     pool_name: String,
@@ -15,7 +16,9 @@ impl StorageManager {
 
     /// Creates a CoW snapshot of a base image.
     /// In a real implementation, this issues an ioctl to /dev/mapper/control.
+    #[instrument(skip(self))]
     pub fn create_snapshot(&self, base_image: &str, snapshot_name: &str) -> io::Result<PathBuf> {
+        info!(base_image, snapshot_name, "Creating DM thin snapshot");
         // 1. Prepare dm_ioctl structure
         // 2. Issue DM_DEV_CREATE
         // 3. Issue DM_TABLE_LOAD with thin-provisioning target
