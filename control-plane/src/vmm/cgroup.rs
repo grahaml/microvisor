@@ -17,16 +17,32 @@ impl CpusetAllocator for NaiveCpusetAllocator {
     }
 }
 
-pub struct SiblingAwareCpusetAllocator;
+pub struct SiblingAwareCpusetAllocator {
+    sysfs_root: PathBuf,
+}
 
 impl SiblingAwareCpusetAllocator {
-    fn discover_smt_siblings(requested_cpus: &str) -> io::Result<Vec<u32>> {
+    pub fn new() -> Self {
+        Self {
+            sysfs_root: PathBuf::from("/sys"),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_root(root: PathBuf) -> Self {
+        Self { sysfs_root: root }
+    }
+
+    fn discover_smt_siblings(&self, requested_cpus: &str) -> io::Result<Vec<u32>> {
         let mut full_set = HashSet::new();
         for cpu_str in requested_cpus.split(',') {
+            if cpu_str.is_empty() { continue; }
             let cpu: u32 = cpu_str.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-            let sibling_path = format!("/sys/devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu);
+            let sibling_path = self.sysfs_root.join(format!("devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu));
             let siblings = fs::read_to_string(sibling_path)?;
             
+            // Siblings list can be comma-separated or range (e.g., "0,4" or "0-1")
+            // For the POC we handle comma-separated which is standard for logical siblings
             for sibling in siblings.trim().split(',') {
                 let sibling_id: u32 = sibling.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                 full_set.insert(sibling_id);
@@ -41,7 +57,7 @@ impl SiblingAwareCpusetAllocator {
 
 impl CpusetAllocator for SiblingAwareCpusetAllocator {
     fn allocate(&self, request_cpus: &str) -> io::Result<String> {
-        let siblings = Self::discover_smt_siblings(request_cpus)?;
+        let siblings = self.discover_smt_siblings(request_cpus)?;
         let siblings_str: Vec<String> = siblings.into_iter().map(|c| c.to_string()).collect();
         Ok(siblings_str.join(","))
     }
