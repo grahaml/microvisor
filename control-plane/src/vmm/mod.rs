@@ -8,7 +8,7 @@ use std::process::{Command, Child};
 use std::io;
 use std::path::PathBuf;
 use tracing::{instrument, info};
-use self::cgroup::{VmCgroup, CgroupManager, CpusetAllocator, NaiveCpusetAllocator};
+use self::cgroup::{VmCgroup, CgroupManager, CpusetAllocator, NaiveCpusetAllocator, NumaTopology};
 use self::storage::StorageManager;
 use self::network::{IpAm, TapDevice, EbpfProgram};
 use self::state::{VmState, VmStateMachine, OrchestratorError};
@@ -38,6 +38,7 @@ pub struct Orchestrator {
     storage_manager: StorageManager,
     ipam: IpAm,
     cpuset_allocator: Box<dyn CpusetAllocator>,
+    numa_topology: NumaTopology,
     firecracker_path: String,
 }
 
@@ -54,6 +55,7 @@ impl Orchestrator {
             storage_manager: StorageManager::new(pool_name),
             ipam: IpAm::new(base_ip),
             cpuset_allocator: Box::new(NaiveCpusetAllocator),
+            numa_topology: NumaTopology::new(),
             firecracker_path: firecracker_path.to_string(),
         })
     }
@@ -88,10 +90,13 @@ impl Orchestrator {
         let cgroup = self.cgroup_manager.create_vm_cgroup(&config.id).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         
-        let allocated_cpus = self.cpuset_allocator.allocate(&config.vcpu_cores)
+        let allocated_cpus = self.cpuset_allocator.allocate_cpus(&config.vcpu_cores)
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
             
-        cgroup.set_cpuset(&allocated_cpus, &config.numa_node).await
+        let allocated_mems = self.numa_topology.get_mems_string(&config.numa_node)
+            .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
+
+        cgroup.set_cpuset(&allocated_cpus, &allocated_mems).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         cgroup.set_memory_limit(config.mem_size_mib as u64 * 1024 * 1024).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;

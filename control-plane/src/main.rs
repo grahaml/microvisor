@@ -82,8 +82,8 @@ mod tests {
     #[test]
     fn test_naive_cpuset_allocator() {
         let allocator = vmm::cgroup::NaiveCpusetAllocator;
-        assert_eq!(allocator.allocate("0,1").unwrap(), "0,1");
-        assert_eq!(allocator.allocate("2").unwrap(), "2");
+        assert_eq!(allocator.allocate_cpus("0,1").unwrap(), "0,1");
+        assert_eq!(allocator.allocate_cpus("2").unwrap(), "2");
     }
 
     #[test]
@@ -100,8 +100,6 @@ mod tests {
         std::fs::write(cpu4_dir.join("thread_siblings_list"), "0,4\n").unwrap();
 
         // Mock CPU 1 and 5 as siblings
-        let cpu1_dir = sysfs.join("devices/system/cpu/cpu1/topology");
-        let cpu5_dir = sysfs.join("devices/system/cpu/cpu1/topology"); // Typo in path but we'll fix it
         std::fs::create_dir_all(sysfs.join("devices/system/cpu/cpu1/topology")).unwrap();
         std::fs::create_dir_all(sysfs.join("devices/system/cpu/cpu5/topology")).unwrap();
         std::fs::write(sysfs.join("devices/system/cpu/cpu1/topology/thread_siblings_list"), "1,5\n").unwrap();
@@ -110,13 +108,13 @@ mod tests {
         let allocator = vmm::cgroup::SiblingAwareCpusetAllocator::with_root(sysfs.to_path_buf());
         
         // Requesting 0 should give 0,4
-        assert_eq!(allocator.allocate("0").unwrap(), "0,4");
+        assert_eq!(allocator.allocate_cpus("0").unwrap(), "0,4");
         
         // Requesting 0,1 should give 0,1,4,5 (sorted)
-        assert_eq!(allocator.allocate("0,1").unwrap(), "0,1,4,5");
+        assert_eq!(allocator.allocate_cpus("0,1").unwrap(), "0,1,4,5");
         
         // Requesting 4 should give 0,4
-        assert_eq!(allocator.allocate("4").unwrap(), "0,4");
+        assert_eq!(allocator.allocate_cpus("4").unwrap(), "0,4");
     }
 
     #[test]
@@ -126,13 +124,43 @@ mod tests {
         let allocator = vmm::cgroup::SiblingAwareCpusetAllocator::with_root(sysfs.to_path_buf());
 
         // Missing CPU file
-        assert!(allocator.allocate("99").is_err());
+        assert!(allocator.allocate_cpus("99").is_err());
 
         // Invalid string format
-        assert!(allocator.allocate("abc").is_err());
+        assert!(allocator.allocate_cpus("abc").is_err());
         
         // Empty string (should handle gracefully or error, let's see current impl)
-        assert_eq!(allocator.allocate("").unwrap(), "");
+        assert_eq!(allocator.allocate_cpus("").unwrap(), "");
+    }
+
+    #[test]
+    fn test_numa_topology_single_node() {
+        let dir = tempdir().unwrap();
+        let sysfs = dir.path();
+        
+        // Mock single NUMA node (node0)
+        let node0_dir = sysfs.join("devices/system/node/node0");
+        std::fs::create_dir_all(&node0_dir).unwrap();
+
+        let topology = vmm::cgroup::NumaTopology::with_root(sysfs.to_path_buf());
+        
+        // Requesting node 1 on single-node host should be forced to 0
+        assert_eq!(topology.get_mems_string("1").unwrap(), "0");
+    }
+
+    #[test]
+    fn test_numa_topology_multi_node() {
+        let dir = tempdir().unwrap();
+        let sysfs = dir.path();
+        
+        // Mock two NUMA nodes
+        std::fs::create_dir_all(sysfs.join("devices/system/node/node0")).unwrap();
+        std::fs::create_dir_all(sysfs.join("devices/system/node/node1")).unwrap();
+
+        let topology = vmm::cgroup::NumaTopology::with_root(sysfs.to_path_buf());
+        
+        // Should honor requested node in multi-node system
+        assert_eq!(topology.get_mems_string("1").unwrap(), "1");
     }
 
     #[test]

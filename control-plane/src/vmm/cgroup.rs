@@ -6,13 +6,57 @@ use tracing::{instrument, info, warn};
 use crate::vmm::observability::SyscallAuditor;
 
 pub trait CpusetAllocator: Send + Sync {
-    fn allocate(&self, request_cpus: &str) -> io::Result<String>;
+    fn allocate_cpus(&self, request_cpus: &str) -> io::Result<String>;
+}
+
+/// Discovers NUMA topology to ensure correct memory pinning.
+pub struct NumaTopology {
+    sysfs_root: PathBuf,
+}
+
+impl NumaTopology {
+    pub fn new() -> Self {
+        Self {
+            sysfs_root: PathBuf::from("/sys"),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_root(root: PathBuf) -> Self {
+        Self { sysfs_root: root }
+    }
+
+    /// Returns the correct cpuset.mems string for a requested node.
+    /// If the host is single-NUMA, it always returns "0".
+    pub fn get_mems_string(&self, requested_node: &str) -> io::Result<String> {
+        let nodes_dir = self.sysfs_root.join("devices/system/node");
+        
+        // Count entries starting with 'node' in sysfs
+        let mut node_count = 0;
+        if nodes_dir.exists() {
+            for entry in fs::read_dir(nodes_dir)? {
+                let entry = entry?;
+                if entry.file_name().to_string_lossy().starts_with("node") {
+                    node_count += 1;
+                }
+            }
+        }
+
+        if node_count <= 1 {
+            info!("Single NUMA node detected, forcing cpuset.mems to 0");
+            Ok("0".to_string())
+        } else {
+            // In a multi-node system, we'd validate the requested node exists.
+            // For now, we trust the config but could add validation here.
+            Ok(requested_node.to_string())
+        }
+    }
 }
 
 pub struct NaiveCpusetAllocator;
 
 impl CpusetAllocator for NaiveCpusetAllocator {
-    fn allocate(&self, request_cpus: &str) -> io::Result<String> {
+    fn allocate_cpus(&self, request_cpus: &str) -> io::Result<String> {
         Ok(request_cpus.to_string())
     }
 }
@@ -41,8 +85,6 @@ impl SiblingAwareCpusetAllocator {
             let sibling_path = self.sysfs_root.join(format!("devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu));
             let siblings = fs::read_to_string(sibling_path)?;
             
-            // Siblings list can be comma-separated or range (e.g., "0,4" or "0-1")
-            // For the POC we handle comma-separated which is standard for logical siblings
             for sibling in siblings.trim().split(',') {
                 let sibling_id: u32 = sibling.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                 full_set.insert(sibling_id);
@@ -56,7 +98,7 @@ impl SiblingAwareCpusetAllocator {
 }
 
 impl CpusetAllocator for SiblingAwareCpusetAllocator {
-    fn allocate(&self, request_cpus: &str) -> io::Result<String> {
+    fn allocate_cpus(&self, request_cpus: &str) -> io::Result<String> {
         let siblings = self.discover_smt_siblings(request_cpus)?;
         let siblings_str: Vec<String> = siblings.into_iter().map(|c| c.to_string()).collect();
         Ok(siblings_str.join(","))
