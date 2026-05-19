@@ -1,0 +1,54 @@
+graph TD
+    classDef control_plane fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef kernel fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+    classDef storage fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+    classDef network fill:#16a085,stroke:#0b5345,stroke-width:2px,color:#fff;
+    classDef user_vm fill:#27ae60,stroke:#145a32,stroke-width:2px,color:#fff;
+    classDef system_vm fill:#8e44ad,stroke:#512e5f,stroke-width:2px,color:#fff;
+    classDef jailer fill:#e74c3c,stroke:#7b241c,stroke-width:2px,color:#fff;
+    classDef external fill:#7f8c8d,stroke:#4d5656,stroke-width:2px,color:#fff;
+
+    Client([External Client / Fleet Manager])
+    Internet([Internet])
+
+    subgraph Host ["Host Node (Bare Metal)"]
+        CP["Microvisor Control Plane (Rust/Tokio)"]
+        
+        subgraph Kernel ["Linux Kernel"]
+            KVM["KVM (/dev/kvm)"]
+            Cgroup["Cgroups v2 (CPU Pinning / Memory)"]
+            NetKernel["TAP Devices & eBPF tc Hooks"]
+            StorageKernel["Device Mapper (dm-thin) & io_uring"]
+        end
+
+        subgraph SysVM ["System MicroVM"]
+            Otel["Tier-0 Telemetry (OTel Collector)"]
+        end
+
+        subgraph UVM ["User MicroVM"]
+            JailerEnv["Jailer Boundary"]
+            Browser["Guest OS (Steel Browser)"]
+        end
+
+        CP -->|Spawns via| JailerEnv
+        JailerEnv -->|Executes| Browser
+        CP -->|ioctl| KVM
+        CP -->|Enforce Limits| Cgroup
+        CP -->|Trace Export| Otel
+        
+        Browser -->|Syscalls| KVM
+        Browser -->|Egress Traffic| NetKernel
+        Browser -->|Ephemeral I/O| StorageKernel
+    end
+
+    Client -->|API Requests| CP
+    NetKernel -->|NAT / Internet Access| Internet
+
+    class Client,Internet external;
+    class CP control_plane;
+    class KVM,Cgroup kernel;
+    class NetKernel network;
+    class StorageKernel storage;
+    class Otel system_vm;
+    class JailerEnv jailer;
+    class Browser user_vm;

@@ -1,0 +1,53 @@
+graph TD
+    classDef control_plane fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef kernel fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+    classDef storage fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+    classDef user_vm fill:#27ae60,stroke:#145a32,stroke-width:2px,color:#fff;
+    classDef jailer fill:#e74c3c,stroke:#7b241c,stroke-width:2px,color:#fff;
+
+    subgraph Host["Host Node"]
+        Orchestrator["Rust Orchestrator (tokio)"]
+        
+        subgraph Cgroup["Cgroup v2: /sys/fs/cgroup/orchestrator/vm-{id}"]
+            FC["Firecracker / Jailer Process"]
+            VCPU["vCPU Thread(s)"]
+        end
+        
+        subgraph ComputeBoundary["Compute Hardware Boundaries"]
+            CPU["Physical Cores 2-15<br>(isolcpus / nohz_full)"]
+            Memory["NUMA Node Memory<br>(Max Enforced, Swap=0)"]
+        end
+
+        subgraph StorageLayer["Storage Subsystem (Host Page Cache Bypassed)"]
+            DMCtrl["/dev/mapper/control"]
+            ThinPool["dm-thin Pool"]
+            BaseImg["Read-Only Base RootFS"]
+            CoWVol["CoW Ephemeral Volume<br>(/dev/mapper/vm-{id})"]
+            MetaVol["Metadata ext4<br>(/dev/vdb)"]
+        end
+    end
+
+    Orchestrator -->|1. ioctl DM_DEV_CREATE| DMCtrl
+    DMCtrl -->|Provisions Snapshot| CoWVol
+    BaseImg -.->|Backing Device| CoWVol
+    ThinPool --> BaseImg
+    ThinPool --> CoWVol
+
+    Orchestrator -->|2. Generate Secrets/Tasks| MetaVol
+    
+    Orchestrator -->|3. Pin to Cores - cpuset.cpus| CPU
+    Orchestrator -->|4. Set Ceiling - memory.max| Memory
+
+    Orchestrator -->|5. Spawn| FC
+    FC -->|Creates| VCPU
+    VCPU -.->|Executes exclusively on| CPU
+    FC -.->|Confined to| Memory
+
+    FC -->|RootFS - O_DIRECT and io_uring| CoWVol
+    FC -->|Metadata - O_DIRECT and io_uring| MetaVol
+
+    class Orchestrator control_plane;
+    class FC jailer;
+    class VCPU user_vm;
+    class CPU,Memory kernel;
+    class DMCtrl,ThinPool,BaseImg,CoWVol,MetaVol storage;

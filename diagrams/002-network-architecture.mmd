@@ -1,0 +1,46 @@
+graph TD
+    classDef control_plane fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef kernel fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+    classDef network fill:#16a085,stroke:#0b5345,stroke-width:2px,color:#fff;
+    classDef user_vm fill:#27ae60,stroke:#145a32,stroke-width:2px,color:#fff;
+    classDef external fill:#7f8c8d,stroke:#4d5656,stroke-width:2px,color:#fff;
+
+    Internet([Internet])
+    HostNIC["Host NIC (eth0)"]
+
+    subgraph ControlPlane ["Microvisor Control Plane"]
+        IPAM["Lock-free IPAM (Atomic Bitset)<br>Allocates 10.0.1.X"]
+        Orchestrator["Network Configurator"]
+    end
+
+    subgraph GuestVM ["User MicroVM Boundary"]
+        GuestOS["Guest OS<br>Static IP: 169.254.1.2<br>Default Route: 169.254.1.1"]
+    end
+
+    subgraph KernelBoundary ["Linux Kernel (Host)"]
+        TAP["Point-to-Point TAP Device"]
+        eBPF["eBPF tc Hook (Egress/Ingress)<br>Stateless NAT Rewrite"]
+        BPFMap["BPF_MAP_TYPE_ARRAY<br>Maps TAP ID to 10.0.1.X"]
+    end
+
+    Orchestrator -->|1. Allocate Ext IP| IPAM
+    Orchestrator -->|2. Create via TUNSETIFF| TAP
+    Orchestrator -->|3. Write IP Mapping| BPFMap
+    Orchestrator -->|4. Attach Classifier| eBPF
+
+    GuestOS -->|Tx: Src 169.254.1.2| TAP
+    TAP --> eBPF
+    BPFMap -.->|Lookup External IP| eBPF
+    eBPF -->|Tx: Src 10.0.1.X - L3/L4 Checksum updated| HostNIC
+    HostNIC --> Internet
+
+    Internet -->|Rx: Dst 10.0.1.X| HostNIC
+    HostNIC --> eBPF
+    eBPF -->|Rx: Dst 169.254.1.2 - Rewrite| TAP
+    TAP --> GuestOS
+
+    class Internet external;
+    class HostNIC kernel;
+    class IPAM,Orchestrator control_plane;
+    class GuestOS user_vm;
+    class TAP,eBPF,BPFMap network;

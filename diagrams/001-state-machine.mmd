@@ -1,0 +1,34 @@
+graph TD
+    classDef control_plane fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef storage fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+    classDef network fill:#16a085,stroke:#0b5345,stroke-width:2px,color:#fff;
+    classDef kernel fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+    classDef user_vm fill:#27ae60,stroke:#145a32,stroke-width:2px,color:#fff;
+
+    Start([Start]) --> Pending["Pending"]
+    
+    Pending -->|Config Validated| ProvisioningStorage["ProvisioningStorage<br>(dm-thin ioctl, Metadata ext4)"]
+    
+    ProvisioningStorage -->|Storage Ready| ConfiguringNetwork["ConfiguringNetwork<br>(IPAM, TAP, eBPF tc)"]
+    ProvisioningStorage -.->|Failure| Terminating
+    
+    ConfiguringNetwork -->|Network Ready| InitializingCgroup["InitializingCgroup<br>(cpuset, memory, no-swap)"]
+    ConfiguringNetwork -.->|Failure| Terminating
+    
+    InitializingCgroup -->|Resources Fenced| LaunchingVMM["LaunchingVMM<br>(Spawn Jailer/Firecracker)"]
+    InitializingCgroup -.->|Failure| Terminating
+    
+    LaunchingVMM -->|VMM Active| Running["Running"]
+    LaunchingVMM -.->|Failure| Terminating
+    
+    Running -->|API Teardown or Error| Terminating["Terminating<br>(Graceful or Emergency Teardown)"]
+    
+    Terminating -->|Resources Freed| Destroyed["Destroyed"]
+    
+    Destroyed --> End([End])
+
+    class Pending,LaunchingVMM,Terminating,Destroyed control_plane;
+    class ProvisioningStorage storage;
+    class ConfiguringNetwork network;
+    class InitializingCgroup kernel;
+    class Running user_vm;
