@@ -78,11 +78,11 @@ impl Orchestrator {
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e))?;
 
         let tap_name = format!("tap-{}", config.id);
-        let tap = TapDevice::create(&tap_name)
+        let tap = TapDevice::create(&tap_name).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         let host_ip = self.ipam.allocate()
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
-        let _ebpf = EbpfProgram::load_nat_program(&tap_name, host_ip)
+        let _ebpf = EbpfProgram::load_nat_program(&tap_name, host_ip).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         
         // 3. Cgroup setup (Spec-000, Spec-003)
