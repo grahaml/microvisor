@@ -44,7 +44,7 @@ The current spec text uses `10.0.0.X` as an example. That range collides with mo
 The link-local choice has known foot-guns (host IPv4LL collisions with `systemd-networkd` / NetworkManager fallback) covered in `docs/004-expert-review.md` §1.10. Two of the three concerns are already mitigated in Spec-007 (drop rule + TAP-iface anti-spoof). The remaining concern (host-NIC IPv4LL collision) is a low-probability event on a developer machine. **Decision:** stay on `169.254.1.2` / `169.254.1.1` for v1. The CGNAT (`100.64.0.0/10`) migration is tracked in `docs/005-deferred-from-review.md` (item D-6) with the trigger noted there.
 
 ### 5. Per-VM rate limiting (deferred to v2)
-A token-bucket rate limiter in the same eBPF program (using `BPF_MAP_TYPE_PERCPU_ARRAY` for the bucket state) gives per-tenant traffic shaping without an extra hop. This is recommended by `docs/003-microvm-improvement-opportunities.md` §4 and the SME review §2.5 implicitly. **Decision:** not in v1. The POC runs without per-VM rate limits; the first multi-tenant deployment must add this before going live. Tracked as a v2 deliverable in this ADR rather than the deferred-list, because it's a known multi-tenant prerequisite, not an optional optimization.
+A token-bucket rate limiter in the same eBPF program (using `BPF_MAP_TYPE_PERCPU_ARRAY` for the bucket state) gives per-tenant traffic shaping without an extra hop — combining NAT rewrite and rate-limit decision in a single eBPF execution saves one context switch per packet versus layering `tc` filters on top. **Decision:** not in v1. The POC runs without per-VM rate limits; the first multi-tenant deployment must add this before going live, since a single media-heavy workload can otherwise saturate the host NIC and starve every other tenant. Tracked as a v2 deliverable in this ADR rather than the deferred-list, because it's a known multi-tenant prerequisite, not an optional optimization.
 
 ### 6. v2 migration triggers
 This ADR's data-path choice is sufficient up to the following thresholds. Any one reopens the ADR:
@@ -69,7 +69,6 @@ This ADR's data-path choice is sufficient up to the following thresholds. Any on
 ## Related
 - `docs/004-expert-review.md` §1.6, §1.10, §2.5
 - `docs/005-deferred-from-review.md` D-1 (`vhost-net`), D-6 (CGNAT migration)
-- `docs/003-microvm-improvement-opportunities.md` §4 (token-bucket rate limiting in eBPF), §5 (IP reclamation)
 - `control-plane/specs/002-networking-ebpf.md`
 - `control-plane/specs/007-ebpf-networking-implementation.md`
 - `ADRs/012-crash-recovery-contract.md` Phase C (IPAM reconciliation)

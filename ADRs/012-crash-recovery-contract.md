@@ -60,4 +60,3 @@ All four components are part of v1. They are sequenced as follows:
 - `docs/004-expert-review.md` §2.2, §4.3, §4.4
 - `control-plane/specs/005-state-machine-orchestrator.md`
 - `ADRs/009-multi-tenancy-threat-model.md` (jailer commitment — anchors the adoption scan's on-disk layout)
-- `docs/003-microvm-improvement-opportunities.md` §11

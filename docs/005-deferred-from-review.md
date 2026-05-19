@@ -26,9 +26,9 @@ Deferred is not the same as "ignored." These items are intentional commitments t
 
 **Re-evaluation trigger.** ≥ 10 concurrent VMs sharing the same base rootfs **and** memory headroom becoming a density bottleneck.
 
-**Tuning hint.** When enabled, drive `pages_to_scan` high during pool warm-up (maximum dedup window) and throttle back once VMs leave the pool. Exclude V8 JIT writable+executable regions via `madvise(MADV_UNMERGEABLE)` — they churn and never merge, just waste CPU.
+**Tuning hint.** When enabled, drive `pages_to_scan` high during pool warm-up (maximum dedup window) and throttle back once VMs leave the pool. Exclude V8 JIT writable+executable regions via `madvise(MADV_UNMERGEABLE)` — they churn and never merge, just waste CPU (difference between ~2% and ~0.5% ksmd CPU overhead at scale). Prior estimate for browser workloads: ~100 GB nominal → ~15–20 GB physical at 200 VMs sharing the same Chromium base.
 
-**Related.** Review §2.7. `docs/003-microvm-improvement-opportunities.md` §2 has the prior thinking.
+**Related.** Review §2.7.
 
 ---
 

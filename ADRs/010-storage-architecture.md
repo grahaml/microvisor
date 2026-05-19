@@ -11,7 +11,7 @@ The SME review (`docs/004-expert-review.md`):
 - §2.4 — flagged the absence of a pool-exhaustion policy (dm-thin's default is silent I/O hang).
 - §3.3 — flagged the `mkfs.ext4 + mount` metadata-drive path as violating the declarative-infrastructure constraint (now replaced with `mke2fs -d` in Spec-008).
 
-`docs/003-microvm-improvement-opportunities.md` §1 separately identifies a longer-term concern: dm-thin's single metadata lock per pool becomes a throughput ceiling at ~50+ concurrent allocating writers. That's a v2 problem, not a v1 problem.
+A longer-term concern that bites at scale: dm-thin's single metadata lock per pool serializes all CoW allocations and becomes the throughput ceiling at ~50+ concurrent allocating writers (every write that needs a new block goes through that lock). That's a v2 problem, not a v1 problem.
 
 ## Alternatives Considered
 
@@ -40,7 +40,7 @@ The two-tier production posture (`dmeventd` primary + `error_if_no_space` fallba
 ### 3. v2 migration triggers
 This ADR's substrate choice is sufficient up to the following thresholds. Any one of them reopens the ADR:
 
-- **Density:** > 50 concurrent VMs sharing the same thin pool, **and** profiling shows the per-pool metadata lock as the dominant contention point. Mitigation order: (a) shard into N pools of ~50 VMs each (minimal architectural change, see `docs/003-microvm-improvement-opportunities.md` §1); (b) move to SPDK blobstore + `vhost-user-blk`.
+- **Density:** > 50 concurrent VMs sharing the same thin pool, **and** profiling shows the per-pool metadata lock as the dominant contention point. Mitigation order: (a) shard into N pools of ~50 VMs each — each pool gets its own metadata device and lock, so 4 pools of 50 ≈ 4× metadata throughput with minimal architectural change; (b) move to SPDK blobstore + `vhost-user-blk` (bypass the kernel block layer entirely; aligns with the "Linux as hardware multiplexer" philosophy but is a significant implementation cost).
 - **Operations:** First production incident caused by a silent pool fill, **or** first deployment to a host where developer-grade loud failure is unacceptable. Trigger: implement the `dmeventd` auto-extend tier per `docs/005-deferred-from-review.md`.
 - **Performance:** Sustained per-VM disk throughput requirements exceed what the kernel block layer can deliver at our concurrency (a real measurement, not a guess). Trigger: SPDK evaluation.
 
@@ -64,7 +64,6 @@ Orphaned thin-pool internal IDs are a real failure mode (orchestrator crashes af
 
 ## Related
 - `docs/004-expert-review.md` §1.1, §2.4, §3.3
-- `docs/003-microvm-improvement-opportunities.md` §1 (v2 substrate alternatives)
 - `docs/005-deferred-from-review.md` (auto-extend tier — when to add it)
 - `control-plane/specs/001-storage-subsystem.md`
 - `control-plane/specs/008-storage-ioctl-implementation.md`
