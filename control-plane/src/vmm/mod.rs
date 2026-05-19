@@ -83,11 +83,11 @@ impl Orchestrator {
         sm.transition_to(VmState::InitializingCgroup)
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e))?;
 
-        let cgroup = self.cgroup_manager.create_vm_cgroup(&config.id)
+        let cgroup = self.cgroup_manager.create_vm_cgroup(&config.id).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
-        cgroup.set_cpuset(&config.vcpu_cores, &config.numa_node)
+        cgroup.set_cpuset(&config.vcpu_cores, &config.numa_node).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
-        cgroup.set_memory_limit(config.mem_size_mib as u64 * 1024 * 1024)
+        cgroup.set_memory_limit(config.mem_size_mib as u64 * 1024 * 1024).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         
         // 4. Launch VMM
@@ -99,7 +99,7 @@ impl Orchestrator {
             .spawn()
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         
-        cgroup.add_process(child.id())
+        cgroup.add_process(child.id()).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
 
         sm.transition_to(VmState::Running)

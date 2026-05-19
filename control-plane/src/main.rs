@@ -69,14 +69,23 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_cgroup_creation() {
+    #[tokio::test]
+    async fn test_cgroup_creation() {
         let dir = tempdir().unwrap();
         let manager = CgroupManager::new(dir.path()).unwrap();
-        let vm_cgroup = manager.create_vm_cgroup("test-vm").unwrap();
+        let vm_cgroup = manager.create_vm_cgroup("test-vm").await.unwrap();
         
         assert!(dir.path().join("vm-test-vm").exists());
         assert!(vm_cgroup.path().exists());
+    }
+
+    #[test]
+    fn test_discover_smt_siblings_mock() {
+        // We can't easily test real /sys paths in a portable way, but we can verify the logic
+        // if we were to mock the fs::read_to_string. For now, we'll just verify it handles
+        // invalid inputs correctly.
+        let result = vmm::cgroup::VmCgroup::discover_smt_siblings("invalid");
+        assert!(result.is_err());
     }
 
     #[test]
