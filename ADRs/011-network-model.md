@@ -11,7 +11,7 @@ The network data path is one of the three load-bearing architectural choices in 
 - Per-VM rate-limiting and traffic-shaping capability.
 - Per-packet overhead and density ceiling.
 
-The spec set commits to **per-VM TAP + eBPF stateless 1:1 NAT** across `control-plane/specs/002-networking-ebpf.md` and `control-plane/specs/007-ebpf-networking-implementation.md`. The SME review (`docs/004-expert-review.md`) found this design fundamentally sound but flagged three implementation gaps — pseudo-header L4 checksums (§1.6), `169.254.0.0/16` foot-guns (§1.10), and the absence of `vhost-net` mention (§2.5). The first two are now addressed in Spec-007's edits; the third is a v2 migration concern. This ADR exists to record the architectural choice, what we rejected and why, and the conditions under which we revisit.
+The spec set commits to **per-VM TAP + eBPF stateless 1:1 NAT** across `control-plane/specs/002-networking-ebpf.md` and `control-plane/specs/007-ebpf-networking-implementation.md`. The SME review (`docs/003-expert-review.md`) found this design fundamentally sound but flagged three implementation gaps — pseudo-header L4 checksums (§1.6), `169.254.0.0/16` foot-guns (§1.10), and the absence of `vhost-net` mention (§2.5). The first two are now addressed in Spec-007's edits; the third is a v2 migration concern. This ADR exists to record the architectural choice, what we rejected and why, and the conditions under which we revisit.
 
 ## Alternatives Considered
 
@@ -41,7 +41,7 @@ Host-routable per-VM IPs are allocated from a configured range via a lock-free a
 The current spec text uses `10.0.0.X` as an example. That range collides with most home and corporate networks, so it must not be hardcoded. **Decision:** the host-routable IP allocation range is a required orchestrator configuration parameter (CIDR), validated at startup against the host's existing routing table to refuse a range that overlaps with an active route. Default for the POC is a non-conflicting RFC1918 slice picked at startup based on what's *not* already in use.
 
 ### 4. Guest-link range (`169.254.0.0/16` vs CGNAT): keep `169.254.0.0/16` for v1
-The link-local choice has known foot-guns (host IPv4LL collisions with `systemd-networkd` / NetworkManager fallback) covered in `docs/004-expert-review.md` §1.10. Two of the three concerns are already mitigated in Spec-007 (drop rule + TAP-iface anti-spoof). The remaining concern (host-NIC IPv4LL collision) is a low-probability event on a developer machine. **Decision:** stay on `169.254.1.2` / `169.254.1.1` for v1. The CGNAT (`100.64.0.0/10`) migration is tracked in `docs/005-deferred-from-review.md` (item D-6) with the trigger noted there.
+The link-local choice has known foot-guns (host IPv4LL collisions with `systemd-networkd` / NetworkManager fallback) covered in `docs/003-expert-review.md` §1.10. Two of the three concerns are already mitigated in Spec-007 (drop rule + TAP-iface anti-spoof). The remaining concern (host-NIC IPv4LL collision) is a low-probability event on a developer machine. **Decision:** stay on `169.254.1.2` / `169.254.1.1` for v1. The CGNAT (`100.64.0.0/10`) migration is tracked in `docs/004-deferred-from-review.md` (item D-6) with the trigger noted there.
 
 ### 5. Per-VM rate limiting (deferred to v2)
 A token-bucket rate limiter in the same eBPF program (using `BPF_MAP_TYPE_PERCPU_ARRAY` for the bucket state) gives per-tenant traffic shaping without an extra hop — combining NAT rewrite and rate-limit decision in a single eBPF execution saves one context switch per packet versus layering `tc` filters on top. **Decision:** not in v1. The POC runs without per-VM rate limits; the first multi-tenant deployment must add this before going live, since a single media-heavy workload can otherwise saturate the host NIC and starve every other tenant. Tracked as a v2 deliverable in this ADR rather than the deferred-list, because it's a known multi-tenant prerequisite, not an optional optimization.
@@ -67,8 +67,8 @@ This ADR's data-path choice is sufficient up to the following thresholds. Any on
 - Host-routable IP range as configuration adds an orchestrator-startup validation step (and a foot-gun if misconfigured).
 
 ## Related
-- `docs/004-expert-review.md` §1.6, §1.10, §2.5
-- `docs/005-deferred-from-review.md` D-1 (`vhost-net`), D-6 (CGNAT migration)
+- `docs/003-expert-review.md` §1.6, §1.10, §2.5
+- `docs/004-deferred-from-review.md` D-1 (`vhost-net`), D-6 (CGNAT migration)
 - `control-plane/specs/002-networking-ebpf.md`
 - `control-plane/specs/007-ebpf-networking-implementation.md`
 - `ADRs/012-crash-recovery-contract.md` Phase C (IPAM reconciliation)

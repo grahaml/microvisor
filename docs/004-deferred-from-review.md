@@ -1,6 +1,6 @@
 # Deferred from Expert Review
 
-This document tracks items raised in `docs/004-expert-review.md` (and side-questions raised when reviewing its recommendations) that have been **explicitly deferred** rather than addressed in the current spec set. Each entry names what it is, why we deferred it, and what re-evaluation trigger should reopen it.
+This document tracks items raised in `docs/003-expert-review.md` (and side-questions raised when reviewing its recommendations) that have been **explicitly deferred** rather than addressed in the current spec set. Each entry names what it is, why we deferred it, and what re-evaluation trigger should reopen it.
 
 Deferred is not the same as "ignored." These items are intentional commitments to *not* do something now, with a documented condition under which we will.
 
@@ -70,7 +70,7 @@ Deferred is not the same as "ignored." These items are intentional commitments t
 
 ## D-6. CGNAT range (`100.64.0.0/10`) vs. link-local `169.254.0.0/16` for the guest network
 
-**What it is.** The current design (Spec-002, Spec-007) hardcodes the guest IP as `169.254.1.2` and the host-side TAP as `169.254.1.1`. Link-local space is convenient but has three known foot-guns (reviewed in `docs/004-expert-review.md` §1.10):
+**What it is.** The current design (Spec-002, Spec-007) hardcodes the guest IP as `169.254.1.2` and the host-side TAP as `169.254.1.1`. Link-local space is convenient but has three known foot-guns (reviewed in `docs/003-expert-review.md` §1.10):
 
 - `169.254.169.254` is the cloud instance-metadata endpoint (SSRF risk). Already mitigated by the eBPF drop rule added to Spec-007.
 - `systemd-networkd` and `NetworkManager` auto-assign IPs from this range on IPv4LL fallback, causing potential host-NIC collisions.
@@ -91,7 +91,7 @@ CGNAT space (`100.64.0.0/10`) is what Firecracker's own examples use and has non
 When picking up an item:
 
 1. Move its entry **out of this file** into either a new ADR or a spec change.
-2. Update the section in `docs/004-expert-review.md` that originally raised it to point at the new doc.
-3. Don't delete from `docs/004-expert-review.md` itself — that doc is a snapshot of the review and should remain as written.
+2. Update the section in `docs/003-expert-review.md` that originally raised it to point at the new doc.
+3. Don't delete from `docs/003-expert-review.md` itself — that doc is a snapshot of the review and should remain as written.
 
 New items should be added here whenever a future review surfaces something that we consciously decide to defer.

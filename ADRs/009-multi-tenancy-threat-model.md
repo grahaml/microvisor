@@ -4,7 +4,7 @@
 Accepted (POC scope). The multi-tenant SMT policy is deferred until a second tenant joins the host; the sandboxing decisions are effective immediately.
 
 ## Context
-Microvisor's pitch is hardware-enforced multi-tenant isolation. The spec set documents the building blocks (1:1 vCPU pinning, cgroups v2, eBPF NAT, ephemeral rootfs) but the SME review (`docs/004-expert-review.md` §1.4, §2.1) flagged that:
+Microvisor's pitch is hardware-enforced multi-tenant isolation. The spec set documents the building blocks (1:1 vCPU pinning, cgroups v2, eBPF NAT, ephemeral rootfs) but the SME review (`docs/003-expert-review.md` §1.4, §2.1) flagged that:
 
 - `smt: false` in the Firecracker config controls only what the **guest** sees; it does not prevent the host scheduler from co-locating two unrelated VMs' vCPUs on the two SMT siblings of the same physical core, which is the actual MDS / L1TF / Spectre-v2 cross-VM side channel.
 - The Firecracker process can run *without* the `jailer` binary, which means the default chroot, capabilities-drop, and seccomp profile are skipped — undoing half of Firecracker's isolation story.
@@ -65,7 +65,7 @@ When reopened, the decision is between (A) host-`nosmt` baseline and (B) sibling
 - The single-tenant assumption is load-bearing — running this configuration with a second tenant present is a security regression, not a degraded mode.
 
 ## Related
-- `docs/004-expert-review.md` §1.4, §2.1, §4.1
+- `docs/003-expert-review.md` §1.4, §2.1, §4.1
 - `control-plane/specs/006-firecracker-vmm-api.md` (SMT host-policy note + jailer integration)
 - `constraints/000-least-privilege.md`
 - `constraints/001-strict-isolation.md`

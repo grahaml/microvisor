@@ -6,7 +6,7 @@ Accepted (v1 / POC scope). Migration triggers for v2 are explicit below.
 ## Context
 The per-VM root disk substrate is one of the most consequential architectural choices in Microvisor: it determines provisioning latency, density ceiling, crash-recovery complexity, and the I/O path for every guest. The current spec set (`control-plane/specs/001-storage-subsystem.md`, `control-plane/specs/008-storage-ioctl-implementation.md`) commits to **Device Mapper Thin Provisioning (`dm-thin`)** with direct `ioctl`s to `/dev/mapper/control`, but does so implicitly. This ADR makes the choice explicit, names the alternatives we rejected, and documents the conditions under which we'd revisit.
 
-The SME review (`docs/004-expert-review.md`):
+The SME review (`docs/003-expert-review.md`):
 - §1.1 — flagged the in-spec ioctl sequence as incomplete (now fixed in Spec-008).
 - §2.4 — flagged the absence of a pool-exhaustion policy (dm-thin's default is silent I/O hang).
 - §3.3 — flagged the `mkfs.ext4 + mount` metadata-drive path as violating the declarative-infrastructure constraint (now replaced with `mke2fs -d` in Spec-008).
@@ -35,13 +35,13 @@ A longer-term concern that bites at scale: dm-thin's single metadata lock per po
 
 **Why not `dmeventd` auto-extend (yet):** Auto-extend requires an LVM2 stack with a VG that has free PEs to extend into, plus `dmeventd` running as a separate daemon. For a single-developer-machine POC, that's complexity we don't need — and we *want* the loud failure mode while we're developing the orchestrator.
 
-The two-tier production posture (`dmeventd` primary + `error_if_no_space` fallback) is the right end state, but is **not** part of v1. It moves to `docs/005-deferred-from-review.md` as a deferred item with the trigger noted in §3 below.
+The two-tier production posture (`dmeventd` primary + `error_if_no_space` fallback) is the right end state, but is **not** part of v1. It moves to `docs/004-deferred-from-review.md` as a deferred item with the trigger noted in §3 below.
 
 ### 3. v2 migration triggers
 This ADR's substrate choice is sufficient up to the following thresholds. Any one of them reopens the ADR:
 
 - **Density:** > 50 concurrent VMs sharing the same thin pool, **and** profiling shows the per-pool metadata lock as the dominant contention point. Mitigation order: (a) shard into N pools of ~50 VMs each — each pool gets its own metadata device and lock, so 4 pools of 50 ≈ 4× metadata throughput with minimal architectural change; (b) move to SPDK blobstore + `vhost-user-blk` (bypass the kernel block layer entirely; aligns with the "Linux as hardware multiplexer" philosophy but is a significant implementation cost).
-- **Operations:** First production incident caused by a silent pool fill, **or** first deployment to a host where developer-grade loud failure is unacceptable. Trigger: implement the `dmeventd` auto-extend tier per `docs/005-deferred-from-review.md`.
+- **Operations:** First production incident caused by a silent pool fill, **or** first deployment to a host where developer-grade loud failure is unacceptable. Trigger: implement the `dmeventd` auto-extend tier per `docs/004-deferred-from-review.md`.
 - **Performance:** Sustained per-VM disk throughput requirements exceed what the kernel block layer can deliver at our concurrency (a real measurement, not a guess). Trigger: SPDK evaluation.
 
 ### 4. Metadata drive substrate (already in Spec-008)
@@ -63,8 +63,8 @@ Orphaned thin-pool internal IDs are a real failure mode (orchestrator crashes af
 - `error_if_no_space=y` means a transient pool-pressure spike causes guest-visible I/O errors during the POC. Acceptable because the POC operator is the developer.
 
 ## Related
-- `docs/004-expert-review.md` §1.1, §2.4, §3.3
-- `docs/005-deferred-from-review.md` (auto-extend tier — when to add it)
+- `docs/003-expert-review.md` §1.1, §2.4, §3.3
+- `docs/004-deferred-from-review.md` (auto-extend tier — when to add it)
 - `control-plane/specs/001-storage-subsystem.md`
 - `control-plane/specs/008-storage-ioctl-implementation.md`
 - `ADRs/012-crash-recovery-contract.md` (orphaned-resource handling)

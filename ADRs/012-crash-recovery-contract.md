@@ -57,6 +57,6 @@ All four components are part of v1. They are sequenced as follows:
 - The adoption-scan logic is a second code path through state-machine construction; it must be kept in sync with the happy-path logic. Worth investing in shared test fixtures.
 
 ## Related
-- `docs/004-expert-review.md` §2.2, §4.3, §4.4
+- `docs/003-expert-review.md` §2.2, §4.3, §4.4
 - `control-plane/specs/005-state-machine-orchestrator.md`
 - `ADRs/009-multi-tenancy-threat-model.md` (jailer commitment — anchors the adoption scan's on-disk layout)

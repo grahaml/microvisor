@@ -3,7 +3,7 @@
 You are an AI engineer assisting in the development of a high-density, ultra-low latency private cloud orchestration plane ("Microvisor"). This project uses Rust, Firecracker, and native Linux kernel primitives to treat the host as a programmable hardware multiplexer.
 
 ## 🎯 Project Vision
-The goal is to deeply understand and implement a bare-metal orchestrator that provides hardware-enforced isolation with "Layer 1" performance. The bash prototype phase is complete; the project is now moving to the Rust control plane. Authoritative context lives in `docs/001-prd.md` (product intent), `docs/002-tad.md` (technical architecture), `docs/004-expert-review.md` (SME review with severity-tiered findings), and `docs/005-deferred-from-review.md` (explicitly-deferred work).
+The goal is to deeply understand and implement a bare-metal orchestrator that provides hardware-enforced isolation with "Layer 1" performance. The bash prototype phase is complete; the project is now moving to the Rust control plane. Authoritative context lives in `docs/001-prd.md` (product intent), `docs/002-tad.md` (technical architecture), `docs/003-expert-review.md` (SME review with severity-tiered findings), and `docs/004-deferred-from-review.md` (explicitly-deferred work).
 
 ## 🛡️ Core Mandates (Non-Negotiable)
 1.  **Hardware Isolation:** 1:1 mapping of guest microVMs to host processes. 1:1 mapping of vCPUs to physical pthreads.
