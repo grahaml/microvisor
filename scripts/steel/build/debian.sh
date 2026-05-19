@@ -7,7 +7,7 @@ set -e
 # Get the project root directory (two levels up from scripts/steel/build/)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ROOTFS_FILE="$PROJECT_ROOT/resources/browser-rootfs.ext4"
-SIZE_MB=3072 # 3GB to accommodate Chromium and Node.js
+SIZE_MB=6144 # 6GB to accommodate Chromium, Node.js, and rendering libraries
 DISTRO="bookworm"
 TEMP_DIR=$(mktemp -d)
 
@@ -24,7 +24,7 @@ mkfs.ext4 -F $ROOTFS_FILE
 echo "[2/5] Running debootstrap (base OS)..."
 mkdir -p $TEMP_DIR/mnt
 sudo mount $ROOTFS_FILE $TEMP_DIR/mnt
-sudo debootstrap --variant=minbase --include=ca-certificates,curl,git,util-linux,procps,tini,iproute2 $DISTRO $TEMP_DIR/mnt http://deb.debian.org/debian/
+sudo debootstrap --variant=minbase --include=ca-certificates,curl,git,util-linux,procps,tini,iproute2,rng-tools-debian $DISTRO $TEMP_DIR/mnt http://deb.debian.org/debian/
 
 echo "[3/5] Installing dependencies and browser environment..."
 # We use a heredoc to run commands inside the chroot
@@ -62,12 +62,15 @@ useradd -m -s /bin/bash browser_user
 
 # Setup browser directory
 mkdir -p /opt/steel-browser
-git clone --depth 1 https://github.com/steel-dev/steel-browser.git /opt/steel-browser
+git clone --branch v0.5.3-beta --depth 1 https://github.com/steel-dev/steel-browser.git /opt/steel-browser
 
-# Install dependencies and build
+# Lower minVersion requirement for fingerprinting to 120 (Debian compatibility)
+sed -i 's/minVersion: [0-9]*/minVersion: 120/g' /opt/steel-browser/api/src/services/cdp/cdp.service.ts
+
+# Install dependencies and build from root (workspaces)
 cd /opt/steel-browser
 npm install
-npm run build
+npm run build -w api
 
 # Setup permissions
 chown -R browser_user:browser_user /opt/steel-browser

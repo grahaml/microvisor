@@ -6,7 +6,7 @@ set -e
 
 cd "$(dirname "$0")/../.."
 
-KERNEL="resources/vmlinux.bin"
+KERNEL="resources/vmlinux-6.1.bin"
 ROOTFS="resources/browser-rootfs.ext4"
 METADATA="resources/metadata.ext4"
 TAP_DEV="tap0"
@@ -26,7 +26,9 @@ chmod 600 $API_SOCKET
 echo "[*] Configuring Steel Browser VM..."
 
 # 3. Boot Source
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/boot-source' \
+# We use 'random.trust_cpu=on' for instant entropy on 6.x kernels
+# 3. Boot Source
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/boot-source' \
   -H 'Content-Type: application/json' \
   -d "{
         \"kernel_image_path\": \"$KERNEL\",
@@ -34,7 +36,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/boot-source' \
     }"
 
 # 4. Machine Config (Higher specs for browser)
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/machine-config' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/machine-config' \
   -H 'Content-Type: application/json' \
   -d '{
         "vcpu_count": 2,
@@ -43,7 +45,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/machine-config' \
     }'
 
 # 5. Root Drive
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/rootfs' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/rootfs' \
   -H 'Content-Type: application/json' \
   -d "{
         \"drive_id\": \"rootfs\",
@@ -53,7 +55,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/rootfs' \
     }"
 
 # 6. Metadata Drive
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/metadata' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/metadata' \
   -H 'Content-Type: application/json' \
   -d "{
         \"drive_id\": \"metadata\",
@@ -63,7 +65,7 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/drives/metadata' \
     }"
 
 # 7. Network Interface
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/network-interfaces/eth0' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/network-interfaces/eth0' \
   -H 'Content-Type: application/json' \
   -d "{
         \"iface_id\": \"eth0\",
@@ -72,12 +74,12 @@ curl --unix-socket $API_SOCKET -X PUT 'http://localhost/network-interfaces/eth0'
     }"
 
 # 8. Entropy Device (Crucial for Browser/TLS)
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/entropy' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/entropy' \
   -H 'Content-Type: application/json' \
   -d '{}'
 
 echo "[+] Powering on..."
-curl --unix-socket $API_SOCKET -X PUT 'http://localhost/actions' \
+curl --fail --silent --unix-socket $API_SOCKET -X PUT 'http://localhost/actions' \
   -H 'Content-Type: application/json' \
   -d '{"action_type": "InstanceStart"}'
 
