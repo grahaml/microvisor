@@ -180,16 +180,42 @@ mod tests {
     }
 
     #[test]
-    fn test_ipam_allocation() {
+    fn test_ipam_allocation_exhaustive() {
         let ipam = IpAm::new(0x0A000000);
-        let ip1 = ipam.allocate().unwrap();
-        let ip2 = ipam.allocate().unwrap();
+        // Allocate all 64 IPs
+        for i in 0..64 {
+            assert_eq!(ipam.allocate().unwrap(), 0x0A000000 + i);
+        }
+        // Next one should fail
+        assert!(ipam.allocate().is_err());
         
-        assert_eq!(ip1, 0x0A000000);
-        assert_eq!(ip2, 0x0A000001);
+        // Release one and re-allocate
+        ipam.release(0x0A000000 + 10);
+        assert_eq!(ipam.allocate().unwrap(), 0x0A000000 + 10);
+    }
+
+    #[test]
+    fn test_ipam_release_out_of_bounds() {
+        let ipam = IpAm::new(0x0A000000);
+        let ip = ipam.allocate().unwrap();
         
-        ipam.release(ip1);
-        let ip3 = ipam.allocate().unwrap();
-        assert_eq!(ip3, 0x0A000000);
+        // Releasing an IP from a different range should be a no-op
+        ipam.release(0x0B000000);
+        
+        // The original IP should still be allocated (bit 0 set)
+        // We check this by trying to allocate again and getting bit 1
+        assert_eq!(ipam.allocate().unwrap(), ip + 1);
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_name() {
+        // We can't easily create a real TAP without root, but we can verify
+        // that it fails with the expected OS error (Permission Denied) 
+        // rather than a logic error.
+        let result = vmm::network::TapDevice::create("test-tap-0").await;
+        if let Err(e) = result {
+            // On most CI/dev systems this will be PermissionDenied or EACCES
+            assert!(e.kind() == io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(1));
+        }
     }
 }
