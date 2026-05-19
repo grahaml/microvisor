@@ -8,7 +8,7 @@ use std::process::{Command, Child};
 use std::io;
 use std::path::PathBuf;
 use tracing::{instrument, info};
-use self::cgroup::{VmCgroup, CgroupManager};
+use self::cgroup::{VmCgroup, CgroupManager, CpusetAllocator, NaiveCpusetAllocator};
 use self::storage::StorageManager;
 use self::network::{IpAm, TapDevice, EbpfProgram};
 use self::state::{VmState, VmStateMachine, OrchestratorError};
@@ -37,6 +37,7 @@ pub struct Orchestrator {
     cgroup_manager: CgroupManager,
     storage_manager: StorageManager,
     ipam: IpAm,
+    cpuset_allocator: Box<dyn CpusetAllocator>,
     firecracker_path: String,
 }
 
@@ -52,6 +53,7 @@ impl Orchestrator {
             cgroup_manager: CgroupManager::new(cgroup_root)?,
             storage_manager: StorageManager::new(pool_name),
             ipam: IpAm::new(base_ip),
+            cpuset_allocator: Box::new(NaiveCpusetAllocator),
             firecracker_path: firecracker_path.to_string(),
         })
     }
@@ -85,7 +87,11 @@ impl Orchestrator {
 
         let cgroup = self.cgroup_manager.create_vm_cgroup(&config.id).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
-        cgroup.set_cpuset(&config.vcpu_cores, &config.numa_node).await
+        
+        let allocated_cpus = self.cpuset_allocator.allocate(&config.vcpu_cores)
+            .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
+            
+        cgroup.set_cpuset(&allocated_cpus, &config.numa_node).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;
         cgroup.set_memory_limit(config.mem_size_mib as u64 * 1024 * 1024).await
             .map_err(|e| OrchestratorError::new(config.session_id, sm.current_state(), e.to_string()))?;

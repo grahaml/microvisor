@@ -51,7 +51,7 @@ async fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vmm::cgroup::CgroupManager;
+    use vmm::cgroup::{CgroupManager, CpusetAllocator};
     use vmm::network::IpAm;
     use vmm::state::{VmStateMachine, VmState};
     use tempfile::tempdir;
@@ -84,7 +84,8 @@ mod tests {
         // We can't easily test real /sys paths in a portable way, but we can verify the logic
         // if we were to mock the fs::read_to_string. For now, we'll just verify it handles
         // invalid inputs correctly.
-        let result = vmm::cgroup::VmCgroup::discover_smt_siblings("invalid");
+        let allocator = vmm::cgroup::SiblingAwareCpusetAllocator;
+        let result = allocator.allocate("invalid");
         assert!(result.is_err());
     }
 

@@ -5,6 +5,48 @@ use std::collections::HashSet;
 use tracing::{instrument, info, warn};
 use crate::vmm::observability::SyscallAuditor;
 
+pub trait CpusetAllocator: Send + Sync {
+    fn allocate(&self, request_cpus: &str) -> io::Result<String>;
+}
+
+pub struct NaiveCpusetAllocator;
+
+impl CpusetAllocator for NaiveCpusetAllocator {
+    fn allocate(&self, request_cpus: &str) -> io::Result<String> {
+        Ok(request_cpus.to_string())
+    }
+}
+
+pub struct SiblingAwareCpusetAllocator;
+
+impl SiblingAwareCpusetAllocator {
+    fn discover_smt_siblings(requested_cpus: &str) -> io::Result<Vec<u32>> {
+        let mut full_set = HashSet::new();
+        for cpu_str in requested_cpus.split(',') {
+            let cpu: u32 = cpu_str.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+            let sibling_path = format!("/sys/devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu);
+            let siblings = fs::read_to_string(sibling_path)?;
+            
+            for sibling in siblings.trim().split(',') {
+                let sibling_id: u32 = sibling.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                full_set.insert(sibling_id);
+            }
+        }
+        
+        let mut result: Vec<u32> = full_set.into_iter().collect();
+        result.sort();
+        Ok(result)
+    }
+}
+
+impl CpusetAllocator for SiblingAwareCpusetAllocator {
+    fn allocate(&self, request_cpus: &str) -> io::Result<String> {
+        let siblings = Self::discover_smt_siblings(request_cpus)?;
+        let siblings_str: Vec<String> = siblings.into_iter().map(|c| c.to_string()).collect();
+        Ok(siblings_str.join(","))
+    }
+}
+
 pub struct CgroupManager {
     root_path: PathBuf,
 }
@@ -55,26 +97,6 @@ impl VmCgroup {
             fs::write(path.join("cpuset.mems"), mems)?;
             Ok(())
         }).await?
-    }
-
-    /// Discovers SMT siblings for a given set of CPUs and verifies they are not split.
-    /// Returns the full list of logical CPUs that should be pinned.
-    pub fn discover_smt_siblings(requested_cpus: &str) -> io::Result<Vec<u32>> {
-        let mut full_set = HashSet::new();
-        for cpu_str in requested_cpus.split(',') {
-            let cpu: u32 = cpu_str.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-            let sibling_path = format!("/sys/devices/system/cpu/cpu{}/topology/thread_siblings_list", cpu);
-            let siblings = fs::read_to_string(sibling_path)?;
-            
-            for sibling in siblings.trim().split(',') {
-                let sibling_id: u32 = sibling.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-                full_set.insert(sibling_id);
-            }
-        }
-        
-        let mut result: Vec<u32> = full_set.into_iter().collect();
-        result.sort();
-        Ok(result)
     }
 
     #[instrument(skip(self))]
