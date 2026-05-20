@@ -5,11 +5,14 @@
 # /var/lib/microvisor/). No real disk partition is required.
 #
 # Idempotent behaviour:
-#   - Pool already active → exit 0 immediately (nothing to do).
-#   - Backing files exist but pool is inactive (e.g. after reboot) →
-#     re-attach loop devices and re-create the DM device; skip the slow
-#     base-image import because the data is already in the pool files.
+#   - Pool already active → exit 0 immediately.
+#   - Backing files exist but pool inactive (e.g. after reboot) →
+#     re-attach loop devices and re-create the DM device; skip the base-image
+#     import because the data is already in the pool files.
 #   - Backing files don't exist → full setup including base-image import.
+#
+# Disk space required: ~6 GB for the base image import (one time).
+# The sparse pool-data.img and pool-meta.img files consume no space until written.
 #
 # Required capabilities: runs as root (called via sudo from the Makefile).
 
@@ -42,7 +45,13 @@ if [ ! -f "$BASE_IMAGE" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 1 — Create backing files (first time only)
+# Step 1 — Create sparse backing files (first time only)
+#
+# truncate creates sparse files: they appear to be the specified size but
+# consume no real disk space until blocks are written. They also read as
+# all-zeros, which is exactly what DM thin-pool needs for a fresh metadata
+# device — no explicit dd zeroing step is required or safe (dd without a
+# count= limit would fill the entire disk).
 # ---------------------------------------------------------------------------
 FIRST_TIME=false
 if [ ! -f "$POOL_DATA" ] || [ ! -f "$POOL_META" ]; then
@@ -53,14 +62,10 @@ mkdir -p "$POOL_DATA_DIR"
 
 if $FIRST_TIME; then
     echo "  Creating pool backing files in $POOL_DATA_DIR ..."
-    echo "    pool-data.img : $POOL_SIZE (sparse — no disk space consumed until written)"
-    echo "    pool-meta.img : 200M"
+    echo "    pool-data.img : $POOL_SIZE (sparse)"
+    echo "    pool-meta.img : 200M  (sparse)"
     truncate -s "$POOL_SIZE" "$POOL_DATA"
     truncate -s 200M         "$POOL_META"
-
-    # DM thin-pool requires the metadata device to be zeroed on first use.
-    echo "  Zeroing metadata device (one-time, ~200 MB) ..."
-    dd if=/dev/zero of="$POOL_META" bs=1M status=progress conv=fsync
 fi
 
 # ---------------------------------------------------------------------------
@@ -76,10 +81,10 @@ echo "    meta : $LOOP_META  ($POOL_META)"
 # Step 3 — Create the thin-pool DM device
 #
 # Table parameters:
-#   128        chunk size in 512-byte sectors = 64 KB (granularity of CoW)
-#   32768      low-water-mark in sectors = 16 MB free; triggers events
+#   128        chunk size in 512-byte sectors = 64 KB (CoW granularity)
+#   32768      low-water-mark in sectors = 16 MB free; triggers udev events
 #   1          number of feature args that follow
-#   skip_block_zeroing   don't zero new chunks (faster; fine for ephemeral VMs)
+#   skip_block_zeroing   don't zero new chunks (fine for ephemeral VMs)
 #   error_if_no_space    return I/O errors when full (ADR-010: loud failure)
 # ---------------------------------------------------------------------------
 echo "  Creating thin-pool device /dev/mapper/$POOL_NAME ..."
@@ -90,34 +95,30 @@ dmsetup create "$POOL_NAME" --table \
 # ---------------------------------------------------------------------------
 # Step 4 — Import base rootfs image as thin volume #1 (first time only)
 #
-# The Microvisor storage manager always creates VM snapshots from volume #1.
-# This step writes the full base image into the pool once; subsequent VM
-# launches just create a CoW snapshot of this volume (fast, zero-copy).
+# The storage manager always snapshots from volume #1. This writes the full
+# base image into the pool once; each VM launch then creates a CoW snapshot
+# of this volume — fast and zero-copy.
 # ---------------------------------------------------------------------------
 if $FIRST_TIME; then
     IMAGE_SIZE=$(stat -c%s "$BASE_IMAGE")
     IMAGE_SECTORS=$(( IMAGE_SIZE / 512 ))
 
     echo "  Importing base image as thin volume #1 ..."
-    echo "    source : $BASE_IMAGE  ($(( IMAGE_SIZE / 1024 / 1024 / 1024 )) GB)"
-    echo "    This is a one-time operation and takes ~60 seconds for a 6 GB image."
+    echo "    source  : $BASE_IMAGE  ($(( IMAGE_SIZE / 1024 / 1024 / 1024 )) GB)"
+    echo "    sectors : $IMAGE_SECTORS"
+    echo "    This writes ~$(( IMAGE_SIZE / 1024 / 1024 / 1024 )) GB and takes ~60 seconds."
 
-    # Allocate volume slot #1 in the pool metadata.
     dmsetup message "$POOL_NAME" 0 "create_thin 1"
 
-    # Create a temporary device node so we can write to the volume.
     dmsetup create base-image-1 --notable
     dmsetup load   base-image-1 --table \
         "0 $IMAGE_SECTORS thin /dev/mapper/$POOL_NAME 1"
     dmsetup resume base-image-1
 
-    # Raw block copy — identical to writing a disk image to a USB drive.
     dd if="$BASE_IMAGE" of=/dev/mapper/base-image-1 bs=4M status=progress
     sync
 
-    # Remove the temporary device node (the data is now permanently in the pool).
     dmsetup remove base-image-1
-
     echo "  Base image imported as volume #1."
 fi
 
