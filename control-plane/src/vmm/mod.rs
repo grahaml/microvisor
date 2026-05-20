@@ -13,9 +13,12 @@ use std::path::{Path, PathBuf};
 use std::os::unix::process::CommandExt;
 use tracing::{instrument, info, warn};
 use self::cgroup::{VmCgroup, CgroupManager, CpusetAllocator, NaiveCpusetAllocator, NumaTopology};
-use self::storage::StorageManager;
+use self::storage::{StorageManager, MetadataDrive};
 use self::network::{IpAm, TapDevice, EbpfProgram};
 use self::state::{VmState, VmStateMachine, OrchestratorError};
+use self::firecracker_api::{
+    FirecrackerClient, MachineConfig, BootSource, Drive, NetworkInterface,
+};
 
 #[derive(Debug, Clone)]
 pub struct VmConfig {
@@ -213,9 +216,72 @@ impl Orchestrator {
             .add_process(pid).await
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
-        // TODO(Chunk-3): insert ConfiguringVMM state here — issue Firecracker API calls
-        // (machine-config, boot-source, drives, network-interfaces, InstanceStart) before
-        // transitioning to Running. For now Firecracker is spawned but not booted.
+        // 5. Configure and boot the VMM via the Firecracker API (Spec-006)
+        sm.transition_to(VmState::ConfiguringVMM)
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e))?;
+
+        // The API socket lives at <jail_root>/run/firecracker.socket from the host.
+        let api_socket = jail_dir.join("run/firecracker.socket");
+        let fc = FirecrackerClient::new(&api_socket);
+
+        fc.wait_for_socket().await
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        fc.put_machine_config(&MachineConfig {
+            vcpu_count: config.cpu_count,
+            mem_size_mib: config.mem_size_mib,
+            smt: false,
+        })
+        .await
+        .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        fc.put_boot_source(&BootSource {
+            // /vmlinux is the kernel hard-linked into the chroot by setup_jail.
+            kernel_image_path: "/vmlinux".to_string(),
+            boot_args: "console=ttyS0 reboot=k panic=1 pci=off nomodules".to_string(),
+        })
+        .await
+        .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        // Rootfs block device is at /dev/rootfs inside the chroot (mknod'd by setup_jail).
+        fc.put_drive(&Drive {
+            drive_id: "rootfs".to_string(),
+            path_on_host: "/dev/rootfs".to_string(),
+            is_root_device: true,
+            is_read_only: false,
+        })
+        .await
+        .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        // Create the metadata drive (ephemeral ext4 image) and place it inside the chroot.
+        let metadata_host_path = jail_dir.join("metadata.ext4");
+        let staging_dir = jail_dir.join("metadata-staging");
+        std::fs::create_dir_all(&staging_dir)
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+        MetadataDrive::create(&metadata_host_path, &staging_dir)
+            .await
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        fc.put_drive(&Drive {
+            drive_id: "metadata".to_string(),
+            // Path is relative to the chroot root.
+            path_on_host: "/metadata.ext4".to_string(),
+            is_root_device: false,
+            is_read_only: false,
+        })
+        .await
+        .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        fc.put_network_interface(&NetworkInterface {
+            iface_id: "eth0".to_string(),
+            host_dev_name: tap_name.clone(),
+        })
+        .await
+        .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+
+        fc.instance_start()
+            .await
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
         sm.transition_to(VmState::Running)
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e))?;
