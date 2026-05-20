@@ -4,9 +4,11 @@ pub mod network;
 pub mod observability;
 pub mod state;
 
+use std::ffi::CString;
+use std::os::unix::fs::MetadataExt;
 use std::process::{Command, Child};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::os::unix::process::CommandExt;
 use tracing::{instrument, info, warn};
 use self::cgroup::{VmCgroup, CgroupManager, CpusetAllocator, NaiveCpusetAllocator, NumaTopology};
@@ -32,6 +34,9 @@ pub struct Vm {
     pub tap: TapDevice,
     pub ebpf: EbpfProgram,
     pub host_ip: u32,
+    /// Jailer chroot root — `/srv/jailer/firecracker/<vm-id>/root`.
+    /// Retained so ADR-012 Phase B adoption scan can re-attach to surviving jails.
+    pub jail_dir: PathBuf,
     pub process: Option<Child>,
 }
 
@@ -41,7 +46,18 @@ pub struct Orchestrator {
     ipam: IpAm,
     cpuset_allocator: Box<dyn CpusetAllocator>,
     numa_topology: NumaTopology,
-    firecracker_path: String,
+    /// Path to the `jailer` binary (ships alongside Firecracker).
+    jailer_path: PathBuf,
+    /// Path to the `firecracker` binary; passed to jailer as `--exec-file`.
+    firecracker_path: PathBuf,
+    /// Guest kernel image; hard-linked into each VM's chroot on launch.
+    kernel_path: PathBuf,
+    /// Base directory under which the jailer creates per-VM chroots.
+    /// Layout: `<chroot_base_dir>/firecracker/<vm-id>/root/`.
+    chroot_base_dir: PathBuf,
+    /// UID/GID the jailer drops to before exec'ing Firecracker (ADR-009).
+    jailer_uid: u32,
+    jailer_gid: u32,
 }
 
 impl Orchestrator {
@@ -49,7 +65,12 @@ impl Orchestrator {
         cgroup_root: &str,
         pool_name: &str,
         base_ip: u32,
+        jailer_path: &str,
         firecracker_path: &str,
+        kernel_path: &str,
+        chroot_base_dir: &str,
+        jailer_uid: u32,
+        jailer_gid: u32,
     ) -> io::Result<Self> {
         info!(cgroup_root, pool_name, base_ip, "Initializing Orchestrator");
         Ok(Self {
@@ -58,7 +79,12 @@ impl Orchestrator {
             ipam: IpAm::new(base_ip),
             cpuset_allocator: Box::new(NaiveCpusetAllocator),
             numa_topology: NumaTopology::new(),
-            firecracker_path: firecracker_path.to_string(),
+            jailer_path: PathBuf::from(jailer_path),
+            firecracker_path: PathBuf::from(firecracker_path),
+            kernel_path: PathBuf::from(kernel_path),
+            chroot_base_dir: PathBuf::from(chroot_base_dir),
+            jailer_uid,
+            jailer_gid,
         })
     }
 
@@ -138,14 +164,34 @@ impl Orchestrator {
             .set_memory_limit(config.mem_size_mib as u64 * 1024 * 1024).await
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
-        // 4. Launch VMM (Spec-006)
+        // 4. Launch VMM via jailer (Spec-006 / ADR-009)
         sm.transition_to(VmState::LaunchingVMM)
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e))?;
+
+        // Compute and record jail_dir before touching the filesystem so that cleanup()
+        // can remove a partially-created jail if setup_jail fails midway.
+        let jail_dir = self.chroot_base_dir
+            .join("firecracker")
+            .join(&config.id)
+            .join("root");
+        ctx.jail_dir = Some(jail_dir.clone());
+
+        self.setup_jail(&jail_dir, &rootfs)
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
         // SAFETY: pre_exec runs post-fork/pre-exec in the child. prctl(2) is
         // async-signal-safe. No allocations, no panics, no Rust runtime calls.
         let child = unsafe {
-            Command::new(&self.firecracker_path)
+            Command::new(&self.jailer_path)
+                .args([
+                    "--exec-file", self.firecracker_path.to_str().unwrap_or_default(),
+                    "--id", config.id.as_str(),
+                    "--uid", &self.jailer_uid.to_string(),
+                    "--gid", &self.jailer_gid.to_string(),
+                    "--chroot-base-dir", self.chroot_base_dir.to_str().unwrap_or_default(),
+                    "--",
+                    "--api-sock", "/run/firecracker.socket",
+                ])
                 .pre_exec(|| {
                     // Ensure the child receives SIGKILL if the orchestrator exits.
                     // Prevents orphan Firecracker processes accumulating across restarts.
@@ -166,6 +212,10 @@ impl Orchestrator {
             .add_process(pid).await
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
+        // TODO(Chunk-3): insert ConfiguringVMM state here — issue Firecracker API calls
+        // (machine-config, boot-source, drives, network-interfaces, InstanceStart) before
+        // transitioning to Running. For now Firecracker is spawned but not booted.
+
         sm.transition_to(VmState::Running)
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e))?;
 
@@ -178,8 +228,42 @@ impl Orchestrator {
             tap,
             ebpf,
             host_ip,
+            jail_dir,
             process: ctx.process.take(),
         })
+    }
+
+    /// Sets up the jailer chroot directory for a VM.
+    ///
+    /// Creates the directory tree, hard-links the kernel image in, and creates a
+    /// block-device node for the rootfs DM device so that Firecracker (which runs
+    /// chrooted) can open it by path. Requires `CAP_MKNOD` for the device node.
+    fn setup_jail(&self, jail_dir: &Path, rootfs_dev: &Path) -> io::Result<()> {
+        std::fs::create_dir_all(jail_dir.join("run"))?;
+        std::fs::create_dir_all(jail_dir.join("dev"))?;
+
+        // Hard-link the kernel into the chroot root to avoid a full copy.
+        // Falls back to copy if the kernel lives on a different filesystem.
+        let kernel_dest = jail_dir.join("vmlinux");
+        std::fs::hard_link(&self.kernel_path, &kernel_dest)
+            .or_else(|_| std::fs::copy(&self.kernel_path, &kernel_dest).map(|_| ()))?;
+
+        // Mirror the rootfs DM device inside the chroot as /dev/rootfs.
+        // mknod(2) requires CAP_MKNOD; the orchestrator must hold this capability.
+        let rdev = std::fs::metadata(rootfs_dev)?.rdev();
+        let dev_node = jail_dir.join("dev/rootfs");
+        let c_path = CString::new(
+            dev_node.to_str()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "jail path is not valid UTF-8"))?,
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+        let ret = unsafe { libc::mknod(c_path.as_ptr(), libc::S_IFBLK | 0o600, rdev as libc::dev_t) };
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        info!(?jail_dir, ?rootfs_dev, "Jail directory ready");
+        Ok(())
     }
 }
 
@@ -191,7 +275,8 @@ impl Orchestrator {
 ///
 /// `TapDevice` and `EbpfProgram` have RAII cleanup via Drop so they are held
 /// as local variables in `provision_vm`. The resources here require explicit
-/// async teardown (DM snapshot, IPAM bitset, cgroup hierarchy, VMM process).
+/// async teardown (DM snapshot, IPAM bitset, cgroup hierarchy, VMM process,
+/// jail directory).
 ///
 /// Each field is `Option` so that `cleanup()` is idempotent: each resource is
 /// released via `take()` exactly once even if `cleanup()` is called repeatedly
@@ -208,6 +293,8 @@ struct ProvisioningContext {
     host_ip: Option<u32>,
     /// cgroup hierarchy for the VM; deleted via `VmCgroup::delete`.
     cgroup: Option<VmCgroup>,
+    /// Jailer chroot root; removed via `fs::remove_dir_all` on rollback.
+    jail_dir: Option<PathBuf>,
     /// Firecracker process; killed on cleanup to avoid orphans.
     process: Option<Child>,
 }
@@ -221,6 +308,7 @@ impl ProvisioningContext {
             snapshot_internal_id: None,
             host_ip: None,
             cgroup: None,
+            jail_dir: None,
             process: None,
         }
     }
@@ -268,6 +356,19 @@ impl ProvisioningContext {
                     vm_id = %self.vm_id,
                     error = %e,
                     "Snapshot cleanup failed — manual dmsetup remove may be required"
+                );
+            }
+        }
+
+        // Remove jail directory tree last — contains only device nodes and file links,
+        // so its removal has no kernel resource implications.
+        if let Some(jail_dir) = self.jail_dir.take() {
+            if let Err(e) = std::fs::remove_dir_all(&jail_dir) {
+                warn!(
+                    session_id = self.session_id,
+                    vm_id = %self.vm_id,
+                    error = %e,
+                    "Jail directory cleanup failed — manual removal may be required"
                 );
             }
         }

@@ -40,7 +40,12 @@ async fn main() -> io::Result<()> {
         "/sys/fs/cgroup/orchestrator",
         "thin-pool-0",
         0x0A000001, // 10.0.0.1
-        "./bin/firecracker"
+        "./bin/jailer",
+        "./bin/firecracker",
+        "./resources/vmlinux",
+        "/srv/jailer",
+        1000, // jailer_uid
+        1000, // jailer_gid
     )?;
 
     println!("Orchestrator initialized.");

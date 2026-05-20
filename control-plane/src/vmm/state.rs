@@ -8,6 +8,7 @@ pub enum VmState {
     ConfiguringNetwork,
     InitializingCgroup,
     LaunchingVMM,
+    ConfiguringVMM,
     Running,
     Terminating,
     Destroyed,
@@ -55,6 +56,9 @@ impl VmStateMachine {
             (VmState::ProvisioningStorage, VmState::ConfiguringNetwork) => true,
             (VmState::ConfiguringNetwork, VmState::InitializingCgroup) => true,
             (VmState::InitializingCgroup, VmState::LaunchingVMM) => true,
+            (VmState::LaunchingVMM, VmState::ConfiguringVMM) => true,
+            (VmState::ConfiguringVMM, VmState::Running) => true,
+            // Direct LaunchingVMM→Running is kept for tests that bypass the API step.
             (VmState::LaunchingVMM, VmState::Running) => true,
             (VmState::Running, VmState::Terminating) => true,
             (VmState::Terminating, VmState::Destroyed) => true,
@@ -63,6 +67,7 @@ impl VmStateMachine {
             (VmState::ConfiguringNetwork, VmState::Terminating) => true,
             (VmState::InitializingCgroup, VmState::Terminating) => true,
             (VmState::LaunchingVMM, VmState::Terminating) => true,
+            (VmState::ConfiguringVMM, VmState::Terminating) => true,
             _ => false,
         }
     }
