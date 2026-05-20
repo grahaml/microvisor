@@ -94,10 +94,11 @@ impl Orchestrator {
         sm.transition_to(VmState::ProvisioningStorage)
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e))?;
 
-        let rootfs = self.storage_manager.create_snapshot(1, &config.id).await
+        let (rootfs, snapshot_id) = self.storage_manager.create_snapshot(1, &config.id).await
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
-        // Record for cleanup before any subsequent fallible operation.
+        // Record both identifiers for cleanup before any subsequent fallible operation.
         ctx.snapshot_name = Some(config.id.clone());
+        ctx.snapshot_internal_id = Some(snapshot_id);
 
         // 2. Network provisioning (Spec-002 / Spec-007)
         sm.transition_to(VmState::ConfiguringNetwork)
@@ -200,6 +201,9 @@ struct ProvisioningContext {
     vm_id: String,
     /// DM thin snapshot name; same as vm_id, used for `dmsetup remove`.
     snapshot_name: Option<String>,
+    /// DM thin-pool internal device ID; used for `dmsetup message … delete <id>`.
+    /// Must be set alongside `snapshot_name` — skipping it leaks a pool metadata slot.
+    snapshot_internal_id: Option<u32>,
     /// IPAM bitset slot (host-order IP); released via `IpAm::release`.
     host_ip: Option<u32>,
     /// cgroup hierarchy for the VM; deleted via `VmCgroup::delete`.
@@ -214,6 +218,7 @@ impl ProvisioningContext {
             session_id,
             vm_id: vm_id.to_string(),
             snapshot_name: None,
+            snapshot_internal_id: None,
             host_ip: None,
             cgroup: None,
             process: None,
@@ -254,8 +259,10 @@ impl ProvisioningContext {
         }
 
         // Remove DM thin snapshot.
-        if let Some(name) = self.snapshot_name.take() {
-            if let Err(e) = storage.delete_snapshot(&name).await {
+        // Both identifiers must be present; if either is missing the snapshot was never
+        // fully created and there is nothing to clean up.
+        if let (Some(name), Some(id)) = (self.snapshot_name.take(), self.snapshot_internal_id.take()) {
+            if let Err(e) = storage.delete_snapshot(&name, id).await {
                 warn!(
                     session_id = self.session_id,
                     vm_id = %self.vm_id,

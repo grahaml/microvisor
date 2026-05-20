@@ -84,12 +84,11 @@ static VM_CONFIG: Array<VmConfig> = Array::with_max_entries(1, 0);
 pub fn tc_egress(ctx: TcContext) -> i32 {
     match try_egress(ctx) {
         Ok(action) => action,
-        // On unexpected parse failures we pass through rather than drop:
-        // the packet hasn't been (fully) modified and dropping would break
-        // connectivity in edge cases. A partially-modified packet that hits
-        // this path is a defect to investigate via the ICMP / short-packet
-        // paths below, not a common path.
-        Err(_) => TC_ACT_PIPE as i32,
+        // A packet that cannot be fully parsed cannot be safely forwarded:
+        // the anti-spoof and SSRF guards may not have run. Dropping is the
+        // correct fail-closed behaviour; TC_ACT_PIPE would let a crafted
+        // short packet bypass the security checks entirely.
+        Err(_) => TC_ACT_SHOT as i32,
     }
 }
 
@@ -216,7 +215,7 @@ fn try_egress(mut ctx: TcContext) -> Result<i32, ()> {
 pub fn tc_ingress(ctx: TcContext) -> i32 {
     match try_ingress(ctx) {
         Ok(action) => action,
-        Err(_) => TC_ACT_PIPE as i32,
+        Err(_) => TC_ACT_SHOT as i32,
     }
 }
 

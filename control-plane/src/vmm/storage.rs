@@ -19,15 +19,20 @@ impl StorageManager {
     }
 
     /// Creates a CoW snapshot of a base image using the 4-step DM sequence.
+    ///
+    /// Returns `(device_path, snapshot_internal_id)`. The caller must store
+    /// `snapshot_internal_id` so it can be passed to `delete_snapshot` on
+    /// teardown — without it the thin-pool internal metadata entry cannot be
+    /// released and will accumulate across VM lifecycles.
     #[instrument(skip(self))]
-    pub async fn create_snapshot(&self, base_image_internal_id: u32, snapshot_name: &str) -> io::Result<PathBuf> {
+    pub async fn create_snapshot(&self, base_image_internal_id: u32, snapshot_name: &str) -> io::Result<(PathBuf, u32)> {
         let snapshot_internal_id = self.next_device_id.fetch_add(1, Ordering::SeqCst);
         let pool_name = self.pool_name.clone();
         let snapshot_name_owned = snapshot_name.to_string();
 
         info!(snapshot_name, snapshot_internal_id, "Creating DM thin snapshot");
 
-        SyscallAuditor::spawn_blocking("dm_snapshot_create", move || {
+        let device_path = SyscallAuditor::spawn_blocking("dm_snapshot_create", move || {
             // Step 1: DM_TARGET_MSG on the pool -> create_snap
             // We use dmsetup for the message and table load to ensure the complex
             // buffer packing is correct for the POC, as per SME review §1.1.
@@ -37,7 +42,7 @@ impl StorageManager {
                 .arg("0")
                 .arg(format!("create_snap {} {}", snapshot_internal_id, base_image_internal_id))
                 .status()?;
-            
+
             if !status.success() {
                 return Err(io::Error::new(io::ErrorKind::Other, "dm_target_msg failed"));
             }
@@ -48,7 +53,7 @@ impl StorageManager {
                 .arg(&snapshot_name_owned)
                 .arg("--notable")
                 .status()?;
-            
+
             if !status.success() {
                 return Err(io::Error::new(io::ErrorKind::Other, "dm_dev_create failed"));
             }
@@ -62,7 +67,7 @@ impl StorageManager {
                 .arg("--table")
                 .arg(table)
                 .status()?;
-            
+
             if !status.success() {
                 return Err(io::Error::new(io::ErrorKind::Other, "dm_table_load failed"));
             }
@@ -72,29 +77,53 @@ impl StorageManager {
                 .arg("resume")
                 .arg(&snapshot_name_owned)
                 .status()?;
-            
+
             if !status.success() {
                 return Err(io::Error::new(io::ErrorKind::Other, "dm_dev_resume failed"));
             }
 
             Ok(PathBuf::from(format!("/dev/mapper/{}", snapshot_name_owned)))
-        }).await?
+        }).await??;
+
+        Ok((device_path, snapshot_internal_id))
     }
 
+    /// Removes a thin snapshot device and releases its internal thin-pool slot.
+    ///
+    /// Two steps are required: `DM_DEV_REMOVE` removes the device node, and
+    /// `DM_TARGET_MSG delete <id>` releases the thin-pool's internal metadata
+    /// entry. Skipping the second step leaks a thin-device slot on every VM
+    /// teardown and will eventually exhaust the pool's 24-bit internal-ID space.
     #[instrument(skip(self))]
-    pub async fn delete_snapshot(&self, snapshot_name: &str) -> io::Result<()> {
+    pub async fn delete_snapshot(&self, snapshot_name: &str, snapshot_internal_id: u32) -> io::Result<()> {
         let snapshot_name_owned = snapshot_name.to_string();
-        info!(snapshot_name, "Deleting DM snapshot");
+        let pool_name = self.pool_name.clone();
+        info!(snapshot_name, snapshot_internal_id, "Deleting DM snapshot");
 
         SyscallAuditor::spawn_blocking("dm_snapshot_delete", move || {
+            // Step 1: remove the device node.
             let status = Command::new("dmsetup")
                 .arg("remove")
                 .arg(&snapshot_name_owned)
                 .status()?;
-            
+
             if !status.success() {
                 return Err(io::Error::new(io::ErrorKind::Other, "dm_dev_remove failed"));
             }
+
+            // Step 2: release the thin-pool internal metadata entry.
+            // Without this the pool leaks a thin-device slot on every teardown.
+            let status = Command::new("dmsetup")
+                .arg("message")
+                .arg(&pool_name)
+                .arg("0")
+                .arg(format!("delete {}", snapshot_internal_id))
+                .status()?;
+
+            if !status.success() {
+                return Err(io::Error::new(io::ErrorKind::Other, "dm_target_msg delete failed"));
+            }
+
             Ok(())
         }).await?
     }
