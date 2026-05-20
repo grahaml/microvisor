@@ -1,3 +1,9 @@
+[workspace]
+members = ["microvisor-common", "xtask"]
+# microvisor-ebpf has its own [workspace] header and is built separately
+# via `cargo xtask build-ebpf` with --target bpfel-unknown-none
+resolver = "2"
+
 [package]
 name = "control-plane"
 version = "0.1.0"
@@ -19,6 +25,8 @@ tracing = "0.1.41"
 tracing-opentelemetry = "0.29.0"
 tracing-subscriber = { version = "0.3.19", features = ["json", "registry", "env-filter"] }
 vmm-sys-util = "0.15.0"
+aya = { version = "0.13", features = ["async_tokio"] }
+microvisor-common = { path = "microvisor-common", features = ["userspace"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"

@@ -1,0 +1,2 @@
+# Compiled eBPF ELF objects — built by `cargo xtask build-ebpf`, not checked in
+src/bpf/

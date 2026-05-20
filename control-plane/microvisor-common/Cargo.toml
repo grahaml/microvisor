@@ -1,0 +1,11 @@
+[package]
+name = "microvisor-common"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# Enable for userspace: activates std, derives, and the aya::Pod impl
+userspace = ["aya"]
+
+[dependencies]
+aya = { version = "0.13", optional = true }

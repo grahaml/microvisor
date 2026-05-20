@@ -48,6 +48,64 @@ The host TAP MTU must be set to match the host's egress NIC MTU (typically 1500)
 - **Anti-Spoofing:** Drops any packet from the TAP that does not have the source IP `169.254.1.2`.
 - **Isolation:** No packets are routed between TAP interfaces; all traffic must go through the host-level NAT.
 
+## Build Toolchain & Host Prerequisites
+
+### Host Prerequisites
+
+Two tools must be installed on the developer's machine before `cargo xtask build-ebpf` will
+succeed. Neither is a Cargo dependency — they are host-level build tools.
+
+#### 1. Rust nightly toolchain + `rust-src`
+
+```bash
+rustup toolchain install nightly-2026-05-19
+rustup component add rust-src --toolchain nightly-2026-05-19
+```
+
+`bpfel-unknown-none` is a tier-3 target with no pre-compiled `core` artifacts. Cargo must
+compile `core` from source via `-Z build-std=core`, which requires (a) a nightly toolchain
+and (b) the `rust-src` component so the source is available locally. The orchestrator
+(`control-plane`) is unaffected — it builds on stable.
+
+The pinned date is recorded in `microvisor-ebpf/rust-toolchain.toml`; see the upgrade
+procedure below.
+
+#### 2. `bpf-linker`
+
+```bash
+cargo install bpf-linker
+```
+
+The standard system linker (`ld`/`lld`) cannot produce valid BPF ELF objects. BPF requires
+specific handling of relocations, section naming conventions, and BTF metadata that
+general-purpose linkers do not implement. `bpf-linker` is a thin Rust wrapper around LLVM's
+BPF backend that fills this role. It is installed once per developer machine and is not a
+per-project Cargo dependency — the same pattern as `protoc` for prot/tonic projects.
+
+`bpf-linker` bundles LLVM internally; the `cargo install` step is slow (it compiles LLVM)
+but only needs to run once. Pre-built binaries are not reliably available, so source install
+is the canonical path.
+
+### Nightly Toolchain Pin
+
+The `microvisor-ebpf` crate pins a specific nightly date in `microvisor-ebpf/rust-toolchain.toml`.
+
+**Why pinned, not rolling nightly.** A rolling `channel = "nightly"` updates daily and can
+silently break the build when aya-ebpf or the compiler changes. Pinning to a specific date
+makes the build reproducible and immune to churn until the pin is deliberately advanced.
+
+**Why the xtask unsets `RUSTUP_TOOLCHAIN`.** When `cargo xtask` runs, the parent stable
+cargo process sets `RUSTUP_TOOLCHAIN=stable` in the environment. This would override the
+`rust-toolchain.toml` file. The xtask explicitly calls `.env_remove("RUSTUP_TOOLCHAIN")`
+before invoking the eBPF build so rustup falls back to the directory-level toolchain file.
+
+**Upgrade procedure.** To advance the pin:
+1. Pick a target date (ideally a date known to work with the current `aya-ebpf` version).
+2. Update `channel` in `microvisor-ebpf/rust-toolchain.toml`.
+3. Run `rustup toolchain install <new-date>` and `rustup component add rust-src --toolchain <new-date>`.
+4. Run `cargo xtask build-ebpf` and confirm the build is green.
+5. Commit the `rust-toolchain.toml` change alongside any aya-ebpf version bumps that required it.
+
 ## Related Documents
 - `specs/002-networking-ebpf.md`
 - `ADRs/004-ebpf-kernel-tracing.md`

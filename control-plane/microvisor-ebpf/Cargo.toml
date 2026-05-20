@@ -1,0 +1,18 @@
+# This crate is its own workspace root so Cargo does not try to build it with
+# the host target when you run `cargo build` from control-plane/.
+# Build it with:  cargo xtask build-ebpf
+[workspace]
+
+[package]
+name = "microvisor-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+microvisor-common = { path = "../microvisor-common" }
+
+[profile.release]
+opt-level = 3
+lto = true

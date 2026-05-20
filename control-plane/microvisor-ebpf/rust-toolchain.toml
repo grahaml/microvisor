@@ -1,0 +1,6 @@
+# The bpfel-unknown-none target requires -Z build-std=core, which is nightly-only.
+# Pinned to a specific nightly date for reproducible builds — see Spec-007 §Build Toolchain
+# for the rationale and upgrade procedure.
+[toolchain]
+channel = "nightly-2026-05-19"
+targets = ["bpfel-unknown-none"]
