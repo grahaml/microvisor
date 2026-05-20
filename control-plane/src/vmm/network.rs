@@ -4,9 +4,36 @@ use std::os::unix::io::AsRawFd;
 use tracing::{instrument, info, warn};
 use crate::vmm::observability::SyscallAuditor;
 
+use aya::{
+    include_bytes_aligned,
+    maps::Array,
+    programs::{SchedClassifier, TcAttachType},
+    Ebpf,
+};
+use microvisor_common::VmConfig;
+
+// ---------------------------------------------------------------------------
+// Compiled eBPF ELF, embedded at build time.
+// Run `cargo xtask build-ebpf` before `cargo build` to produce this file.
+// ---------------------------------------------------------------------------
+
+static EBPF_BYTES: &[u8] = include_bytes_aligned!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/bpf/microvisor-ebpf"
+));
+
 // TUNSETIFF is not always defined in libc for all architectures, define it manually
 // This is the standard value for Linux x86_64
 const TUNSETIFF: libc::c_ulong = 0x400454ca;
+
+// SIOCSIFFLAGS / SIOCGIFFLAGS: standard Linux socket ioctl to set/get interface flags.
+// Not exposed in all libc platform targets; values are stable Linux ABI.
+const SIOCGIFFLAGS: libc::c_ulong = 0x8913;
+const SIOCSIFFLAGS: libc::c_ulong = 0x8914;
+
+// ---------------------------------------------------------------------------
+// IP address manager
+// ---------------------------------------------------------------------------
 
 pub struct IpAm {
     /// Atomic bitset for IP allocation (up to 64 IPs for now)
@@ -32,8 +59,6 @@ impl IpAm {
             }
             let mask = 1 << first_free;
             if self.bits.compare_exchange(current, current | mask, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                // Ensure IP is converted to network order if needed elsewhere, 
-                // but for now we store as host order u32.
                 return Ok(self.base_ip + first_free);
             }
         }
@@ -50,13 +75,17 @@ impl IpAm {
     }
 }
 
+// ---------------------------------------------------------------------------
+// TAP device
+// ---------------------------------------------------------------------------
+
 pub struct TapDevice {
     name: String,
     _file: std::fs::File,
 }
 
 impl TapDevice {
-    /// Creates a persistent TAP device via /dev/net/tun.
+    /// Creates a persistent TAP device via /dev/net/tun and brings the link UP.
     #[instrument]
     pub async fn create(name: &str) -> io::Result<Self> {
         info!(name, "Creating TAP device");
@@ -69,7 +98,7 @@ impl TapDevice {
                 .open("/dev/net/tun")?;
 
             let mut ifr: libc::ifreq = unsafe { std::mem::zeroed() };
-            
+
             // IFF_TAP: Ethernet TAP device
             // IFF_NO_PI: Do not provide packet information (standard for Firecracker)
             ifr.ifr_ifru.ifru_flags = (libc::IFF_TAP | libc::IFF_NO_PI) as i16;
@@ -91,19 +120,7 @@ impl TapDevice {
                 }
             }
 
-            // Set the interface UP
-            // For the POC, we'll shell out to 'ip link set' for simplicity in managing 
-            // the control socket vs the link state.
-            let status = std::process::Command::new("ip")
-                .arg("link")
-                .arg("set")
-                .arg(&name_owned)
-                .arg("up")
-                .status()?;
-
-            if !status.success() {
-                warn!(name = %name_owned, "Failed to set TAP interface up");
-            }
+            set_interface_up(&name_owned)?;
 
             Ok(Self {
                 name: name_owned,
@@ -117,20 +134,124 @@ impl TapDevice {
     }
 }
 
+/// Brings a network interface UP via SIOCSIFFLAGS.
+///
+/// Opens a temporary SOCK_DGRAM, reads current flags with SIOCGIFFLAGS,
+/// ORs in IFF_UP, and writes back with SIOCSIFFLAGS. Avoids shelling out
+/// to `ip link set`, keeping the control-plane free of CLI dependencies.
+fn set_interface_up(name: &str) -> io::Result<()> {
+    struct FdGuard(libc::c_int);
+    impl Drop for FdGuard {
+        fn drop(&mut self) {
+            unsafe { libc::close(self.0); }
+        }
+    }
+
+    let sock = unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) };
+    if sock < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let _guard = FdGuard(sock);
+
+    let mut ifr: libc::ifreq = unsafe { std::mem::zeroed() };
+    let bytes = name.as_bytes();
+    let len = std::cmp::min(bytes.len(), libc::IFNAMSIZ - 1);
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            bytes.as_ptr(),
+            ifr.ifr_name.as_mut_ptr() as *mut u8,
+            len,
+        );
+    }
+
+    if unsafe { libc::ioctl(sock, SIOCGIFFLAGS, &mut ifr) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    unsafe { ifr.ifr_ifru.ifru_flags |= libc::IFF_UP as i16; }
+
+    if unsafe { libc::ioctl(sock, SIOCSIFFLAGS, &ifr) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// eBPF NAT program loader
+// ---------------------------------------------------------------------------
+
 pub struct EbpfProgram {
-    // bpf_obj: Option<Box<dyn std::any::Any>>,
+    /// Holds the loaded BPF object alive for the lifetime of the VM's network.
+    /// Dropping this detaches the programs and removes the maps.
+    _ebpf: Ebpf,
 }
 
 impl EbpfProgram {
-    /// Loads the stateless NAT eBPF program and attaches it to the TAP interface.
+    /// Loads the stateless NAT eBPF programs and attaches them to `tap_name`.
+    ///
+    /// `host_ip` is the IPAM-allocated host-routable IP in **host byte order**.
+    /// It is stored in the BPF map as network byte order (`.to_be()`).
     #[instrument]
     pub async fn load_nat_program(tap_name: &str, host_ip: u32) -> io::Result<Self> {
-        info!(tap_name, host_ip, "Loading eBPF NAT program (Stub)");
-        // In a real implementation:
-        // 1. Compile/Open eBPF object
-        // 2. Load into kernel
-        // 3. Attach to tc qdisc clsact
-        // 4. Update maps with (169.254.1.2 -> host_ip)
-        Ok(Self {})
+        info!(tap_name, host_ip, "Loading eBPF NAT program");
+        let tap_name = tap_name.to_string();
+
+        SyscallAuditor::spawn_blocking("ebpf_load", move || {
+            let mut ebpf = Ebpf::load(EBPF_BYTES)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("aya load: {e}")))?;
+
+            // Populate VM_CONFIG[0] before attaching so the programs never see
+            // an uninitialised entry.
+            {
+                let map = ebpf
+                    .map_mut("VM_CONFIG")
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "VM_CONFIG map not found"))?;
+                let mut config_map: Array<_, VmConfig> = map
+                    .try_into()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("array map: {e}")))?;
+                let config = VmConfig {
+                    host_ip: host_ip.to_be(),
+                    guest_ip: 0xA9FE_0102_u32.to_be(), // 169.254.1.2
+                    mac: [0u8; 6],
+                    _pad: [0u8; 2],
+                };
+                config_map
+                    .set(0, config, 0)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("map set: {e}")))?;
+            }
+
+            // Create the clsact qdisc on the TAP interface.
+            // Ignore EEXIST: a prior run may have already installed it.
+            let _ = aya::programs::tc::qdisc_add_clsact(&tap_name);
+
+            // Egress: packets leaving the guest → rewrite src IP (SNAT).
+            {
+                let prog: &mut SchedClassifier = ebpf
+                    .program_mut("tc_egress")
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "tc_egress not found"))?
+                    .try_into()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("program type: {e}")))?;
+                prog.load()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("egress load: {e}")))?;
+                prog.attach(&tap_name, TcAttachType::Egress)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("egress attach: {e}")))?;
+            }
+
+            // Ingress: packets arriving at the guest → rewrite dst IP (DNAT).
+            {
+                let prog: &mut SchedClassifier = ebpf
+                    .program_mut("tc_ingress")
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "tc_ingress not found"))?
+                    .try_into()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("program type: {e}")))?;
+                prog.load()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("ingress load: {e}")))?;
+                prog.attach(&tap_name, TcAttachType::Ingress)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("ingress attach: {e}")))?;
+            }
+
+            Ok(Self { _ebpf: ebpf })
+        }).await?
     }
 }
