@@ -3,6 +3,7 @@ pub mod storage;
 pub mod network;
 pub mod observability;
 pub mod state;
+pub mod firecracker_api;
 
 use std::ffi::CString;
 use std::os::unix::fs::MetadataExt;
