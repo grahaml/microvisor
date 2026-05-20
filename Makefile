@@ -59,7 +59,7 @@ check:
 	@test -f $(KERNEL_LINK)   || { echo "  MISSING: $(KERNEL_LINK)  (run: make kernel)"; exit 1; }
 	@test -f $(BASE_IMAGE)    || { echo "  MISSING: $(BASE_IMAGE)"; exit 1; }
 	@test -f $(POOL_SENTINEL) || { echo "  MISSING: pool not set up  (run: sudo make pool)"; exit 1; }
-	@dmsetup info $(POOL_NAME) >/dev/null 2>&1 \
+	@test -b /dev/mapper/$(POOL_NAME) \
 		|| { echo "  MISSING: /dev/mapper/$(POOL_NAME) not active  (run: sudo make pool)"; exit 1; }
 	@echo "  All prerequisites OK"
 
