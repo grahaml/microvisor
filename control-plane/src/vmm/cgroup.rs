@@ -139,6 +139,7 @@ impl CgroupManager {
 #[derive(Debug, Clone)]
 pub struct VmCgroup {
     path: PathBuf,
+    #[allow(dead_code)]
     id: String,
 }
 

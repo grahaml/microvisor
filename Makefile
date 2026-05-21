@@ -78,8 +78,12 @@ cgroup:
 		echo "  Creating $(CGROUP_ROOT) (needs sudo)..."; \
 		sudo mkdir -p $(CGROUP_ROOT); \
 		sudo chown $(USER):$(USER) $(CGROUP_ROOT); \
-		echo "  Done — $(CGROUP_ROOT) owned by $(USER)"; \
 	}
+	@grep -q cpuset $(CGROUP_ROOT)/cgroup.subtree_control 2>/dev/null || { \
+		echo "  Enabling cpuset+memory controllers in $(CGROUP_ROOT)..."; \
+		sudo sh -c 'echo "+cpuset +memory +pids" > $(CGROUP_ROOT)/cgroup.subtree_control'; \
+	}
+	@echo "  cgroup ready: $(CGROUP_ROOT)"
 
 # ---------------------------------------------------------------------------
 # jailer — promote the jailer binary from the Firecracker release directory
@@ -137,5 +141,8 @@ clean: teardown
 # ---------------------------------------------------------------------------
 # run — build and run the control-plane (requires pool to be active)
 # ---------------------------------------------------------------------------
+BIN := $(CURDIR)/control-plane/target/debug/control-plane
+
 run: cgroup check
-	cargo run --manifest-path control-plane/Cargo.toml
+	cargo build --manifest-path control-plane/Cargo.toml
+	sudo $(BIN)

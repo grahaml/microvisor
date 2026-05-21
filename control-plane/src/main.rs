@@ -36,7 +36,7 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Microvisor Control Plane starting...");
 
-    let _orchestrator = Orchestrator::new(
+    let orchestrator = Orchestrator::new(
         "/sys/fs/cgroup/orchestrator",
         "thin-pool-0",
         0x0A000001, // 10.0.0.1
@@ -48,7 +48,30 @@ async fn main() -> io::Result<()> {
         1000, // jailer_gid
     )?;
 
-    println!("Orchestrator initialized.");
+    tracing::info!("Orchestrator initialized. Launching test VM...");
+
+    let config = vmm::VmConfig {
+        id: "vm-test-001".to_string(),
+        session_id: 1,
+        cpu_count: 1,
+        mem_size_mib: 256,
+        vcpu_cores: "0".to_string(),
+        numa_node: "0".to_string(),
+        base_image: "resources/browser-rootfs.ext4".to_string(),
+    };
+
+    match orchestrator.launch_vm(config).await {
+        Ok(vm) => {
+            tracing::info!(vm_id = %vm.config.id, "VM launched successfully");
+            println!("VM is running. Press Ctrl-C to terminate.");
+            tokio::signal::ctrl_c().await?;
+            tracing::info!("Shutting down...");
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "VM launch failed");
+            return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+        }
+    }
 
     Ok(())
 }

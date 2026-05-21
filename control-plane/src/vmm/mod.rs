@@ -83,9 +83,9 @@ impl Orchestrator {
             ipam: IpAm::new(base_ip),
             cpuset_allocator: Box::new(NaiveCpusetAllocator),
             numa_topology: NumaTopology::new(),
-            jailer_path: PathBuf::from(jailer_path),
-            firecracker_path: PathBuf::from(firecracker_path),
-            kernel_path: PathBuf::from(kernel_path),
+            jailer_path: PathBuf::from(jailer_path).canonicalize()?,
+            firecracker_path: PathBuf::from(firecracker_path).canonicalize()?,
+            kernel_path: PathBuf::from(kernel_path).canonicalize()?,
             chroot_base_dir: PathBuf::from(chroot_base_dir),
             jailer_uid,
             jailer_gid,
@@ -183,6 +183,14 @@ impl Orchestrator {
         self.setup_jail(&jail_dir, &rootfs)
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
+        // The jailer owns its own cgroupv2 subtree. We pass cpuset and memory
+        // constraints via --cgroup flags so the jailer writes them into the cgroup
+        // it creates, rather than fighting it for process ownership.
+        let mem_max = config.mem_size_mib as u64 * 1024 * 1024;
+        let cpuset_cpus_arg = format!("cpuset.cpus={}", allocated_cpus);
+        let cpuset_mems_arg = format!("cpuset.mems={}", allocated_mems);
+        let memory_max_arg = format!("memory.max={}", mem_max);
+
         // SAFETY: pre_exec runs post-fork/pre-exec in the child. prctl(2) is
         // async-signal-safe. No allocations, no panics, no Rust runtime calls.
         let child = unsafe {
@@ -192,29 +200,28 @@ impl Orchestrator {
                     "--id", config.id.as_str(),
                     "--uid", &self.jailer_uid.to_string(),
                     "--gid", &self.jailer_gid.to_string(),
+                    "--cgroup-version", "2",
+                    "--cgroup", &cpuset_cpus_arg,
+                    "--cgroup", &cpuset_mems_arg,
+                    "--cgroup", &memory_max_arg,
                     "--chroot-base-dir", self.chroot_base_dir.to_str().unwrap_or_default(),
                     "--",
                     "--api-sock", "/run/firecracker.socket",
                 ])
                 .pre_exec(|| {
                     // Ensure the child receives SIGKILL if the orchestrator exits.
-                    // Prevents orphan Firecracker processes accumulating across restarts.
                     let ret = libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
                     if ret != 0 {
                         return Err(io::Error::last_os_error());
                     }
                     Ok(())
                 })
+                .stderr(std::process::Stdio::piped())
                 .spawn()
         }
         .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
-        let pid = child.id();
         ctx.process = Some(child);
-
-        ctx.cgroup.as_ref().unwrap()
-            .add_process(pid).await
-            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
 
         // 5. Configure and boot the VMM via the Firecracker API (Spec-006)
         sm.transition_to(VmState::ConfiguringVMM)
@@ -261,6 +268,13 @@ impl Orchestrator {
         MetadataDrive::create(&metadata_host_path, &staging_dir)
             .await
             .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+        let c_meta = CString::new(metadata_host_path.to_str()
+            .ok_or_else(|| OrchestratorError::new(session_id, sm.current_state(), "metadata path not UTF-8".to_string()))?)
+            .map_err(|e| OrchestratorError::new(session_id, sm.current_state(), e.to_string()))?;
+        let ret = unsafe { libc::chown(c_meta.as_ptr(), self.jailer_uid, self.jailer_gid) };
+        if ret != 0 {
+            return Err(OrchestratorError::new(session_id, sm.current_state(), io::Error::last_os_error().to_string()));
+        }
 
         fc.put_drive(&Drive {
             drive_id: "metadata".to_string(),
@@ -325,6 +339,12 @@ impl Orchestrator {
         )
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         let ret = unsafe { libc::mknod(c_path.as_ptr(), libc::S_IFBLK | 0o600, rdev as libc::dev_t) };
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // Firecracker runs as jailer_uid:jailer_gid after the jailer drops root.
+        // See ADR-009 §2 for the known risk of using a real host UID here.
+        let ret = unsafe { libc::chown(c_path.as_ptr(), self.jailer_uid, self.jailer_gid) };
         if ret != 0 {
             return Err(io::Error::last_os_error());
         }

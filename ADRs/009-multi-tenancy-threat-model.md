@@ -33,6 +33,10 @@ The `jailer` provides — for free — chroot to a per-VM directory, cgroup atta
 
 **Implementation note:** The state machine's `LaunchingVMM` state invokes `jailer`, not `firecracker` directly. The jailer's `--exec-file` flag points at the Firecracker binary; the jailer handles the rest. The jail directory layout (`/srv/jailer/firecracker/<vm-id>/`) becomes the orchestrator's per-VM workspace.
 
+**Jailer UID/GID — known risk, explicit upgrade trigger:** The orchestrator creates a block-device node for the VM's rootfs inside the chroot (`/dev/rootfs`) and `chown`s it to the jailer's configured `uid:gid` so Firecracker can open it after the jailer drops root. In the POC this UID (default: 1000) is a real user on the host. If a guest escaped the chroot via a KVM or jailer exploit, it would execute as that user.
+
+**Upgrade trigger:** Before any non-team deployment, the jailer must run under a dedicated system account (e.g. UID ≥ 10000) with no home directory, no shell, and no other files on the host owned by that UID. This is a config-only change — the orchestrator's `jailer_uid`/`jailer_gid` fields are the sole injection point.
+
 ### 3. Firecracker default seccomp profile is preserved
 We do **not** pass `--seccomp-level 0` or supply a custom JSON filter that broadens the syscall set. The default Firecracker seccomp filter (loaded automatically) is the baseline; any future override requires its own ADR.
 

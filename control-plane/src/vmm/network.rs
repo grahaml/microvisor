@@ -22,9 +22,9 @@ static EBPF_BYTES: &[u8] = include_bytes_aligned!(concat!(
     "/src/bpf/microvisor-ebpf"
 ));
 
-// TUNSETIFF is not always defined in libc for all architectures, define it manually
-// This is the standard value for Linux x86_64
+// TUNSETIFF / TUNSETPERSIST: standard Linux TUN/TAP ioctls (stable ABI).
 const TUNSETIFF: libc::c_ulong = 0x400454ca;
+const TUNSETPERSIST: libc::c_ulong = 0x400454cb;
 
 // SIOCSIFFLAGS / SIOCGIFFLAGS: standard Linux socket ioctl to set/get interface flags.
 // Not exposed in all libc platform targets; values are stable Linux ABI.
@@ -81,11 +81,14 @@ impl IpAm {
 
 pub struct TapDevice {
     name: String,
-    _file: std::fs::File,
 }
 
 impl TapDevice {
-    /// Creates a persistent TAP device via /dev/net/tun and brings the link UP.
+    /// Creates a persistent TAP device, brings it UP, then releases the fd.
+    ///
+    /// TUNSETPERSIST keeps the interface alive after we close our fd so that
+    /// Firecracker (running inside the jailer chroot) can attach to it by name
+    /// without hitting EBUSY from a competing open fd.
     #[instrument]
     pub async fn create(name: &str) -> io::Result<Self> {
         info!(name, "Creating TAP device");
@@ -118,19 +121,44 @@ impl TapDevice {
                 if res < 0 {
                     return Err(io::Error::last_os_error());
                 }
+                // Mark persistent so the interface survives after we close this fd.
+                let res = libc::ioctl(file.as_raw_fd(), TUNSETPERSIST, 1usize);
+                if res < 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
 
             set_interface_up(&name_owned)?;
 
-            Ok(Self {
-                name: name_owned,
-                _file: file,
-            })
+            // fd closes here — interface persists due to TUNSETPERSIST.
+            Ok(Self { name: name_owned })
         }).await?
     }
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+
+impl Drop for TapDevice {
+    fn drop(&mut self) {
+        // Reopen the interface to get an fd, then un-persist and close — this
+        // deletes the interface from the kernel network stack.
+        let Ok(file) = std::fs::OpenOptions::new()
+            .read(true).write(true).open("/dev/net/tun") else { return };
+
+        let mut ifr: libc::ifreq = unsafe { std::mem::zeroed() };
+        ifr.ifr_ifru.ifru_flags = (libc::IFF_TAP | libc::IFF_NO_PI) as i16;
+        let bytes = self.name.as_bytes();
+        let len = std::cmp::min(bytes.len(), libc::IFNAMSIZ - 1);
+        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ifr.ifr_name.as_mut_ptr() as *mut u8, len) };
+
+        unsafe {
+            if libc::ioctl(file.as_raw_fd(), TUNSETIFF, &ifr) == 0 {
+                libc::ioctl(file.as_raw_fd(), TUNSETPERSIST, 0usize);
+            }
+        }
+        // file closes here, taking the interface down.
     }
 }
 
