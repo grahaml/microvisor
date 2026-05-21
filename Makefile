@@ -137,5 +137,5 @@ clean: teardown
 # ---------------------------------------------------------------------------
 # run — build and run the control-plane (requires pool to be active)
 # ---------------------------------------------------------------------------
-run: check cgroup
+run: cgroup check
 	cargo run --manifest-path control-plane/Cargo.toml
