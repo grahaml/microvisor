@@ -15,11 +15,12 @@ JAILER_SRC    := resources/release-v1.10.1-x86_64/jailer-v1.10.1-x86_64
 KERNEL_SRC    := resources/vmlinux-6.1.bin
 KERNEL_LINK   := resources/vmlinux
 POOL_SENTINEL := resources/.pool-ready
+CGROUP_ROOT   := /sys/fs/cgroup/orchestrator
 
 # ---------------------------------------------------------------------------
 # Phonies — targets that don't produce a file of the same name
 # ---------------------------------------------------------------------------
-.PHONY: help all check jailer kernel pool teardown clean run
+.PHONY: help all check cgroup jailer kernel pool teardown clean run
 
 # ---------------------------------------------------------------------------
 # help — default target, printed when you run `make` with no arguments
@@ -28,10 +29,11 @@ help:
 	@echo ""
 	@echo "  Microvisor build pipeline"
 	@echo ""
-	@echo "  make all          Full setup: jailer + kernel symlink + DM pool"
+	@echo "  make all          Full setup: jailer + kernel symlink + DM pool + cgroup"
 	@echo "  make check        Verify all prerequisites are in place"
 	@echo "  make jailer       Promote bin/jailer from the release directory"
 	@echo "  make kernel       Create resources/vmlinux symlink → vmlinux-6.1.bin"
+	@echo "  make cgroup       Create cgroup root owned by current user  [needs sudo once]"
 	@echo "  make pool         Create DM thin pool + import base image  [needs sudo]"
 	@echo "  make teardown     Tear down pool and detach loop devices   [needs sudo]"
 	@echo "  make clean        teardown + remove generated symlinks and sentinels"
@@ -44,7 +46,7 @@ help:
 # ---------------------------------------------------------------------------
 # all — full setup in dependency order
 # ---------------------------------------------------------------------------
-all: bin/jailer $(KERNEL_LINK) $(POOL_SENTINEL)
+all: bin/jailer $(KERNEL_LINK) $(POOL_SENTINEL) cgroup
 	@echo ""
 	@echo "  Setup complete. Run 'make check' to verify, 'make run' to boot a VM."
 	@echo ""
@@ -61,7 +63,23 @@ check:
 	@test -f $(POOL_SENTINEL) || { echo "  MISSING: pool not set up  (run: sudo make pool)"; exit 1; }
 	@test -b /dev/mapper/$(POOL_NAME) \
 		|| { echo "  MISSING: /dev/mapper/$(POOL_NAME) not active  (run: sudo make pool)"; exit 1; }
+	@test -w $(CGROUP_ROOT) \
+		|| { echo "  MISSING: $(CGROUP_ROOT) not writable  (run: make cgroup)"; exit 1; }
 	@echo "  All prerequisites OK"
+
+# ---------------------------------------------------------------------------
+# cgroup — create the orchestrator cgroup root owned by the current user
+#
+# Needs sudo once per machine (or after reboot if cgroupfs is re-mounted).
+# Subsequent calls are no-ops because test -w exits 0 when already writable.
+# ---------------------------------------------------------------------------
+cgroup:
+	@test -w $(CGROUP_ROOT) 2>/dev/null || { \
+		echo "  Creating $(CGROUP_ROOT) (needs sudo)..."; \
+		sudo mkdir -p $(CGROUP_ROOT); \
+		sudo chown $(USER):$(USER) $(CGROUP_ROOT); \
+		echo "  Done — $(CGROUP_ROOT) owned by $(USER)"; \
+	}
 
 # ---------------------------------------------------------------------------
 # jailer — promote the jailer binary from the Firecracker release directory
@@ -119,5 +137,5 @@ clean: teardown
 # ---------------------------------------------------------------------------
 # run — build and run the control-plane (requires pool to be active)
 # ---------------------------------------------------------------------------
-run: check
+run: check cgroup
 	cargo run --manifest-path control-plane/Cargo.toml
