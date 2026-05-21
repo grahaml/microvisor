@@ -115,7 +115,7 @@ pool: $(POOL_SENTINEL)
 #     re-importing the base image.
 #   - If the backing files don't exist, creates them and imports from scratch.
 # ---------------------------------------------------------------------------
-$(POOL_SENTINEL): $(BASE_IMAGE) bin/jailer $(KERNEL_LINK)
+$(POOL_SENTINEL): $(BASE_IMAGE)
 	sudo POOL_NAME="$(POOL_NAME)" POOL_SIZE="$(POOL_SIZE)" \
 	     POOL_DATA_DIR="$(POOL_DATA_DIR)" BASE_IMAGE="$(BASE_IMAGE)" \
 	     bash scripts/setup-pool.sh

@@ -320,6 +320,10 @@ impl Orchestrator {
     /// block-device node for the rootfs DM device so that Firecracker (which runs
     /// chrooted) can open it by path. Requires `CAP_MKNOD` for the device node.
     fn setup_jail(&self, jail_dir: &Path, rootfs_dev: &Path) -> io::Result<()> {
+        // Remove any stale jail from a previous run that didn't clean up (e.g. Ctrl-C).
+        if jail_dir.exists() {
+            std::fs::remove_dir_all(jail_dir)?;
+        }
         std::fs::create_dir_all(jail_dir.join("run"))?;
         std::fs::create_dir_all(jail_dir.join("dev"))?;
 
