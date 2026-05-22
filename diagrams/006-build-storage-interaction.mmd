@@ -1,0 +1,22 @@
+graph LR
+    classDef build fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef storage fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+
+    subgraph BuildSystem ["Build System"]
+        Orch["Build Orchestrator"]
+    end
+
+    subgraph FS ["fs-storage"]
+        direction TB
+        Index["InputHash Index"]
+        Blobs["Blob Store"]
+    end
+
+    Orch -->|1: Query InputHash| Index
+    Index -.->|2: Return ContentHash| Orch
+    Blobs -.->|3: Pull OCI if Hit| Orch
+    Orch -->|4: Push Artifacts if Miss| Blobs
+    Orch -->|5: Update Index| Index
+
+    class BuildSystem,Orch build;
+    class FS,Index,Blobs storage;

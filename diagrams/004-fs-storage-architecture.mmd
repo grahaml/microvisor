@@ -1,0 +1,36 @@
+graph TD
+    classDef caller fill:#7f8c8d,stroke:#4d5656,stroke-width:2px,color:#fff;
+    classDef store fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+    classDef backend fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+    classDef disk fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff;
+
+    Callers([Build System / Microvisor / CLI])
+    
+    subgraph LayerStore ["LayerStore (Typed API)"]
+        LS_API["publish_layer / pull_layer<br/>resolve_input_hash<br/>publish_manifest<br/>create_tag / GC"]
+    end
+
+    subgraph BackendTrait ["StorageBackend Trait (Abstraction)"]
+        Trait["put_blob / get_blob<br/>put_meta / get_meta<br/>list_meta"]
+    end
+
+    subgraph Implementation ["LocalJsonBackend"]
+        DiskOp["Atomic Rename (tmp + rename)<br/>Canonical JSON<br/>Directory Sharding"]
+    end
+
+    subgraph Storage ["On-Disk Structure"]
+        Objects["objects/ (ContentHash)"]
+        Manifests["manifests/ (ManifestHash)"]
+        Meta["meta/ (Provenance & Index)"]
+        Refs["refs/tags/ (Mutable Pointers)"]
+    end
+
+    Callers --> LS_API
+    LS_API --> Trait
+    Trait --> DiskOp
+    DiskOp --> Storage
+
+    class Callers caller;
+    class LS_API store;
+    class Trait backend;
+    class DiskOp,Storage disk;

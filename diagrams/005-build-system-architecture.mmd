@@ -1,0 +1,33 @@
+graph LR
+    classDef orchestrator fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef parser fill:#8e44ad,stroke:#512e5f,stroke-width:2px,color:#fff;
+    classDef converter fill:#16a085,stroke:#0b5345,stroke-width:2px,color:#fff;
+    classDef external fill:#7f8c8d,stroke:#4d5656,stroke-width:2px,color:#fff;
+
+    DF([Dockerfile])
+
+    subgraph BuildPipeline ["Build Pipeline"]
+        direction LR
+        Parser["Parser"]
+        Orch["Orchestrator"]
+        Converter["Converter"]
+    end
+
+    subgraph External ["External Services"]
+        BuildKit["BuildKit Engine"]
+        Store["fs-storage"]
+    end
+
+    DF --> Parser
+    Parser -->|Build Graph| Orch
+    
+    Orch <-->|Cache Check| Store
+    Orch -->|Execute Stage| BuildKit
+    BuildKit -->|Filesystem| Converter
+    Converter -->|Dual Artifacts| Store
+    Orch -->|Manifest| Store
+
+    class Orch orchestrator;
+    class Parser parser;
+    class Converter converter;
+    class BuildKit,Store external;

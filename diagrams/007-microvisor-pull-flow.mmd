@@ -1,0 +1,31 @@
+graph TD
+    classDef control fill:#2b5c8f,stroke:#1a3a5a,stroke-width:2px,color:#fff;
+    classDef storage fill:#f1c40f,stroke:#9c8b00,stroke-width:2px,color:#000;
+    classDef kernel fill:#d35400,stroke:#873600,stroke-width:2px,color:#fff;
+
+    Manifest([Release Manifest])
+
+    subgraph MV ["Microvisor Control Plane"]
+        Puller["Manifest/Layer Puller"]
+        Verify["Integrity Verifier<br/>(SHA-256 of Uncompressed)"]
+    end
+
+    subgraph FS ["fs-storage"]
+        Artifacts["ext4.zst Blobs"]
+    end
+
+    subgraph Kernel ["Host Storage Layer"]
+        DMThin["dm-thin Pool"]
+        BaseVol["Base Thin Volume"]
+        Snap["VM CoW Snapshot"]
+    end
+
+    Manifest --> Puller
+    Puller -->|Fetch ContentHash| Artifacts
+    Artifacts -->|Stream ext4.zst| Verify
+    Verify -->|dd verified ext4| BaseVol
+    BaseVol -->|DM_TARGET_MSG create_snap| Snap
+
+    class Puller,Verify control;
+    class Artifacts storage;
+    class DMThin,BaseVol,Snap kernel;
