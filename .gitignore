@@ -17,3 +17,6 @@ target/
 Cargo.lock
 
 **/node_modules/*
+storage/
+*.tar.gz
+.claude/

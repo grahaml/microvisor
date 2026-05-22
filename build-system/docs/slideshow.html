@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Smelter — Microvisor Build System</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0D0D0D;
+    --bg-card: #161616;
+    --bg-card-hover: #1C1C1C;
+    --gold: #C6952B;
+    --gold-light: #E8C85B;
+    --gold-dim: #8B6914;
+    --orange: #FF8800;
+    --molten: #FF6B00;
+    --hot: #FFCC44;
+    --text: #E0E0E0;
+    --text-dim: #888;
+    --text-bright: #F5F5F5;
+    --border: #2A2A2A;
+    --accent-green: #4CAF50;
+    --accent-red: #E53935;
+    --accent-blue: #42A5F5;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── Slide container ── */
+  .deck {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .slide-inner {
+    max-width: 1000px;
+    width: 100%;
+  }
+
+  /* ── Typography ── */
+  h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 3.2rem;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: 2px;
+    margin-bottom: 0.4em;
+  }
+
+  h2 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--gold-light);
+    margin-bottom: 0.6em;
+  }
+
+  h3 {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 0.8em;
+  }
+
+  p, li {
+    font-size: 1.15rem;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+  ul li {
+    padding: 0.35em 0;
+    padding-left: 1.6em;
+    position: relative;
+  }
+  ul li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--gold);
+    font-size: 0.9em;
+  }
+
+  .subtitle {
+    font-size: 1.3rem;
+    color: var(--text-dim);
+    font-weight: 300;
+    margin-bottom: 1.5em;
+  }
+
+  .dim { color: var(--text-dim); }
+  .gold { color: var(--gold); }
+  .hot { color: var(--hot); }
+  .molten { color: var(--molten); }
+  .bright { color: var(--text-bright); }
+
+  code, .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95em;
+    color: var(--gold-light);
+  }
+
+  .code-block {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre;
+    overflow-x: auto;
+    margin: 1em 0;
+  }
+
+  /* ── Cards ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 1em;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+  }
+
+  .card-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.3rem;
+    color: var(--gold);
+    margin-bottom: 0.3em;
+  }
+
+  .card-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 0.6em;
+  }
+
+  .card p {
+    font-size: 1rem;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 1.2em 0;
+  }
+
+  .flow-node {
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 32px;
+    text-align: center;
+    min-width: 240px;
+    transition: border-color 0.2s;
+  }
+  .flow-node.highlight {
+    border-color: var(--gold);
+    box-shadow: 0 0 20px rgba(198, 149, 43, 0.15);
+  }
+  .flow-node .label {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 1.2rem;
+    color: var(--gold);
+  }
+  .flow-node .desc {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .flow-arrow {
+    font-size: 1.4rem;
+    color: var(--molten);
+    line-height: 1;
+    padding: 4px 0;
+  }
+
+  .flow-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* ── Layer stack ── */
+  .layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 1em 0;
+    max-width: 600px;
+  }
+
+  .layer {
+    display: flex;
+    align-items: center;
+    border-radius: 8px;
+    padding: 14px 20px;
+    gap: 16px;
+    border: 1px solid var(--border);
+  }
+
+  .layer-order {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    min-width: 18px;
+  }
+
+  .layer-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    color: var(--gold-light);
+    flex: 1;
+  }
+
+  .layer-freq {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  .layer.changed {
+    border-color: var(--molten);
+    background: rgba(255, 107, 0, 0.06);
+  }
+  .layer.cached {
+    border-color: var(--accent-green);
+    background: rgba(76, 175, 80, 0.04);
+  }
+  .layer.cached .layer-freq { color: var(--accent-green); }
+  .layer.changed .layer-freq { color: var(--molten); }
+
+  /* ── Architecture boxes ── */
+  .arch-diagram {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin: 1em 0;
+  }
+
+  .arch-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    text-align: center;
+  }
+
+  .arch-box .arch-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .arch-box .arch-desc {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .arch-row {
+    display: flex;
+    gap: 16px;
+    margin: 1em 0;
+  }
+  .arch-row .arch-box { flex: 1; }
+
+  /* ── Pipeline steps ── */
+  .pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin: 1.5em 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pipe-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 130px;
+  }
+
+  .pipe-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+
+  .pipe-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--gold-light);
+    margin-bottom: 4px;
+  }
+
+  .pipe-desc {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  .pipe-arrow {
+    color: var(--molten);
+    font-size: 1.3rem;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--gold);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  td {
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    border-bottom: 1px solid #1A1A1A;
+    color: var(--text);
+    vertical-align: top;
+  }
+  td code {
+    font-size: 0.85rem;
+    background: #111;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  /* ── Nav ── */
+  .nav {
+    position: fixed;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    z-index: 100;
+  }
+
+  .nav-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-dim);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .nav-btn:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
+  .nav-dots {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-dot.active {
+    background: var(--gold);
+    box-shadow: 0 0 8px rgba(198, 149, 43, 0.4);
+  }
+  .nav-dot:hover { background: var(--gold-dim); }
+
+  .slide-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  /* ── Title slide special ── */
+  .title-slide {
+    text-align: center;
+  }
+
+  .title-slide h1 {
+    font-size: 4rem;
+    letter-spacing: 8px;
+    margin-bottom: 0.2em;
+  }
+
+  .logo-container {
+    margin-bottom: 1.5em;
+  }
+
+  .logo-container svg {
+    filter: drop-shadow(0 0 40px rgba(255, 107, 0, 0.15));
+  }
+
+  .divider {
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    margin: 1.5em auto;
+  }
+
+  /* ── Two-column layout ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: start;
+  }
+
+  .two-col-wide-left {
+    display: grid;
+    grid-template-columns: 1.3fr 0.7fr;
+    gap: 40px;
+    align-items: start;
+  }
+
+  /* ── Hash visual ── */
+  .hash-box {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 0.6em 0;
+  }
+
+  .hash-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+
+  .hash-formula {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  /* ── Security table ── */
+  .sec-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 1em 0;
+  }
+
+  .sec-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+
+  .sec-item .sec-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+
+  .sec-item .sec-desc {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- ═══════════════════ SLIDE 0: Title ═══════════════════ -->
+  <div class="slide active title-slide" data-slide="0">
+    <div class="slide-inner">
+      <div class="logo-container">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="200" height="200">
+          <defs>
+            <linearGradient id="s-crucible" x1="0.2" y1="0" x2="0.8" y2="1"><stop offset="0%" stop-color="#555"/><stop offset="100%" stop-color="#1E1E1E"/></linearGradient>
+            <linearGradient id="s-streamGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFDD55"/><stop offset="15%" stop-color="#FFAA00"/><stop offset="50%" stop-color="#FF6B00"/><stop offset="100%" stop-color="#FF4500"/></linearGradient>
+            <linearGradient id="s-moldGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3E3E3E"/><stop offset="100%" stop-color="#1A1A1A"/></linearGradient>
+            <linearGradient id="s-moltenFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFCC44"/><stop offset="40%" stop-color="#FF8800"/><stop offset="100%" stop-color="#FF4500"/></linearGradient>
+            <linearGradient id="s-ingotTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#E8C85B"/><stop offset="100%" stop-color="#D4A840"/></linearGradient>
+            <linearGradient id="s-ingotFront" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C6952B"/><stop offset="100%" stop-color="#8B6914"/></linearGradient>
+            <linearGradient id="s-ingotSide" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#A07020"/><stop offset="100%" stop-color="#6B4A10"/></linearGradient>
+            <radialGradient id="s-heatGlow" cx="0.55" cy="0.35" r="0.55"><stop offset="0%" stop-color="#FF8800" stop-opacity="0.4"/><stop offset="100%" stop-color="#FF4500" stop-opacity="0"/></radialGradient>
+            <filter id="s-glow"><feGaussianBlur stdDeviation="3.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="s-softGlow"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="s-wideGlow"><feGaussianBlur stdDeviation="12"/></filter>
+            <filter id="s-shimmer"><feGaussianBlur stdDeviation="2.5"/></filter>
+          </defs>
+          <rect width="400" height="400" rx="24" fill="#0D0D0D"/>
+          <ellipse cx="200" cy="180" rx="160" ry="140" fill="url(#s-heatGlow)" opacity="0.35"/>
+          <path d="M 92 88 L 232 138 L 242 242 Q 240 262 222 268 L 130 262 Q 112 258 115 238 Z" fill="url(#s-crucible)" stroke="#5A5A5A" stroke-width="2"/>
+          <path d="M 88 84 L 236 136 L 238 150 L 90 98 Z" fill="#5A5A5A"/>
+          <path d="M 89 85 L 235 137 L 236 143 L 90 91 Z" fill="#6E6E6E"/>
+          <path d="M 108 100 L 236 143 L 238 155 Q 230 160 180 158 Q 130 155 115 140 Z" fill="#FF6B00" opacity="0.85" filter="url(#s-glow)"/>
+          <path d="M 140 120 L 234 146 L 235 152 Q 210 156 170 148 Q 142 138 140 125 Z" fill="#FFAA00" opacity="0.6"/>
+          <ellipse cx="195" cy="143" rx="30" ry="5" fill="#FFCC44" opacity="0.4" transform="rotate(12, 195, 143)"/>
+          <path d="M 98 120 Q 68 110 65 135 Q 62 160 92 165" fill="none" stroke="#5A5A5A" stroke-width="7" stroke-linecap="round"/>
+          <path d="M 238 175 Q 268 168 272 192 Q 275 218 248 222" fill="none" stroke="#5A5A5A" stroke-width="7" stroke-linecap="round"/>
+          <path d="M 130 82 Q 124 58 131 38 Q 136 20 129 0" fill="none" stroke="#FF6B00" stroke-width="2.2" stroke-linecap="round" opacity="0.3" filter="url(#s-shimmer)"/>
+          <path d="M 160 72 Q 165 48 158 28 Q 153 10 160 -8" fill="none" stroke="#FFAA00" stroke-width="1.8" stroke-linecap="round" opacity="0.25" filter="url(#s-shimmer)"/>
+          <ellipse cx="248" cy="230" rx="25" ry="70" fill="#FF6B00" opacity="0.12" filter="url(#s-wideGlow)"/>
+          <path d="M 236 143 Q 248 148 254 165 Q 258 190 256 220 Q 254 250 252 278" fill="none" stroke="url(#s-streamGrad)" stroke-width="13" stroke-linecap="round" filter="url(#s-softGlow)"/>
+          <path d="M 237 146 Q 247 152 252 170 Q 255 195 254 225 Q 253 255 252 278" fill="none" stroke="#FFCC44" stroke-width="4.5" stroke-linecap="round" opacity="0.65"/>
+          <ellipse cx="252" cy="283" rx="20" ry="7" fill="#FFAA00" opacity="0.65" filter="url(#s-glow)"/>
+          <path d="M 205 280 L 195 335 L 310 335 L 300 280 Z" fill="url(#s-moldGrad)" stroke="#4A4A4A" stroke-width="1.5"/>
+          <path d="M 205 280 L 195 335 L 200 335 L 210 280 Z" fill="#2A2A2A"/>
+          <path d="M 300 280 L 310 335 L 305 335 L 295 280 Z" fill="#2A2A2A"/>
+          <path d="M 195 335 L 310 335 L 306 340 L 199 340 Z" fill="#1A1A1A" stroke="#333" stroke-width="1"/>
+          <path d="M 206 280 L 299 280 L 297 283 L 208 283 Z" fill="#555"/>
+          <path d="M 210 285 L 212 330 L 294 330 L 296 285 Z" fill="url(#s-moltenFill)" opacity="0.8"/>
+          <path d="M 55 305 L 150 305 L 144 313 L 61 313 Z" fill="url(#s-ingotTop)" stroke="#8B6914" stroke-width="1"/>
+          <path d="M 61 313 L 144 313 L 140 340 L 65 340 Z" fill="url(#s-ingotFront)" stroke="#8B6914" stroke-width="1"/>
+          <path d="M 144 313 L 150 305 L 146 332 L 140 340 Z" fill="url(#s-ingotSide)" stroke="#8B6914" stroke-width="1"/>
+          <text x="103" y="332" font-family="monospace" font-size="11" font-weight="bold" fill="#6B4A10" text-anchor="middle" opacity="0.5">a3f8</text>
+        </svg>
+      </div>
+      <h1>THE SMELTER</h1>
+      <p class="subtitle">Layered, Content-Addressed Builds for Microvisor</p>
+      <div class="divider"></div>
+      <p class="dim" style="font-size: 0.95rem;">Microvisor Build System &middot; 2026</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 1: The Problem ═══════════════════ -->
+  <div class="slide" data-slide="1">
+    <div class="slide-inner">
+      <h3>The Problem</h3>
+      <h2>Monolithic RootFS Rebuilds</h2>
+      <p style="margin-bottom: 1.2em;">Today, a one-line app change forces a full <code>rootfs.ext4</code> rebuild. Every byte is redistributed even when most haven't changed.</p>
+
+      <div class="two-col">
+        <div>
+          <p style="margin-bottom: 0.8em; color: var(--text-bright); font-weight: 500;">A rootfs is really four independent concerns:</p>
+          <div class="layer-stack">
+            <div class="layer">
+              <span class="layer-order">3</span>
+              <span class="layer-name">App code</span>
+              <span class="layer-freq">changes every deploy</span>
+            </div>
+            <div class="layer">
+              <span class="layer-order">2</span>
+              <span class="layer-name">Heavy deps</span>
+              <span class="layer-freq">changes independently</span>
+            </div>
+            <div class="layer">
+              <span class="layer-order">1</span>
+              <span class="layer-name">Platform binaries</span>
+              <span class="layer-freq">changes occasionally</span>
+            </div>
+            <div class="layer">
+              <span class="layer-order">0</span>
+              <span class="layer-name">Base OS</span>
+              <span class="layer-freq">changes ~monthly</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p style="margin-bottom: 0.8em; color: var(--text-bright); font-weight: 500;">A monolithic blob conflates all four:</p>
+          <ul>
+            <li>No way to skip unchanged work</li>
+            <li>No sharing of common layers across workloads</li>
+            <li>No way to know which bytes actually changed</li>
+            <li>Full rebuild + full redistribute on every deploy</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 2: The Lexicon ═══════════════════ -->
+  <div class="slide" data-slide="2">
+    <div class="slide-inner">
+      <h3>The Lexicon</h3>
+      <h2>A Metallurgical Build System</h2>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title">Alloy</div>
+          <div class="card-meta">Dockerfile</div>
+          <p>The build declaration. A precise recipe specifying which base metals to combine, what to remove, and what properties the final product must have.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Charged</div>
+          <div class="card-meta">Build executed</div>
+          <p>To <em>charge</em> The Smelter is to load it with raw materials and fire the furnace. Once charged, the process runs to completion.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">Ingot</div>
+          <div class="card-meta">Build artifact</div>
+          <p>The output. Dense, stamped with its content hash, ready for deployment. Same inputs always produce the same Ingot.</p>
+        </div>
+        <div class="card">
+          <div class="card-title">The Reserve</div>
+          <div class="card-meta">fs-storage</div>
+          <p>The content-addressed vault where Ingots are cataloged, deduplicated, and held until Microvisor draws from it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 3: The Flow ═══════════════════ -->
+  <div class="slide" data-slide="3">
+    <div class="slide-inner">
+      <h3>The Process</h3>
+      <h2>From Alloy to Ingot</h2>
+
+      <div class="two-col">
+        <div class="flow">
+          <div class="flow-node highlight">
+            <div class="label">Alloy</div>
+            <div class="desc">Operator writes a Dockerfile with Steel labels</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-label">charge</div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node highlight">
+            <div class="label">The Smelter</div>
+            <div class="desc">Parses, resolves graph, fires BuildKit</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-label">tap</div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node highlight">
+            <div class="label">Ingot</div>
+            <div class="desc">Content-addressed ext4 layers + manifest</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-label">deposit</div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node">
+            <div class="label">The Reserve</div>
+            <div class="desc">Stored, deduplicated, ready for deploy</div>
+          </div>
+        </div>
+
+        <div>
+          <p style="margin-bottom: 1.2em; font-weight: 500; color: var(--text-bright);">Extended vocabulary</p>
+          <table>
+            <tr><td><code>Flux</code></td><td class="dim">Build context — files, secrets, environment</td></tr>
+            <tr><td><code>Slag</code></td><td class="dim">Intermediate artifacts discarded post-build</td></tr>
+            <tr><td><code>Heat</code></td><td class="dim">A single build run</td></tr>
+            <tr><td><code>Assay</code></td><td class="dim">Integrity verification of an Ingot</td></tr>
+            <tr><td><code>Stamp</code></td><td class="dim">The content-address hash on an Ingot</td></tr>
+            <tr><td><code>Mold</code></td><td class="dim">Output format spec (zstd ext4)</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 4: Layer Stack ═══════════════════ -->
+  <div class="slide" data-slide="4">
+    <div class="slide-inner">
+      <h3>Layer Model</h3>
+      <h2>Build Once, Reuse Forever</h2>
+      <p style="margin-bottom: 1.2em;">When only the app code changes, only that layer is re-charged. Everything below it is pulled from The Reserve.</p>
+
+      <div class="two-col">
+        <div>
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.6em;">App code changed &rarr; rebuild only Layer 3</p>
+          <div class="layer-stack">
+            <div class="layer changed">
+              <span class="layer-order">3</span>
+              <span class="layer-name">steel-browser-app</span>
+              <span class="layer-freq">REBUILD</span>
+            </div>
+            <div class="layer cached">
+              <span class="layer-order">2</span>
+              <span class="layer-name">chrome-headless</span>
+              <span class="layer-freq">CACHED</span>
+            </div>
+            <div class="layer cached">
+              <span class="layer-order">1</span>
+              <span class="layer-name">steel-platform</span>
+              <span class="layer-freq">CACHED</span>
+            </div>
+            <div class="layer cached">
+              <span class="layer-order">0</span>
+              <span class="layer-name">debian-bookworm</span>
+              <span class="layer-freq">CACHED</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.6em;">Chrome updated &rarr; rebuild Layers 2 + 3</p>
+          <div class="layer-stack">
+            <div class="layer changed">
+              <span class="layer-order">3</span>
+              <span class="layer-name">steel-browser-app</span>
+              <span class="layer-freq">REBUILD</span>
+            </div>
+            <div class="layer changed">
+              <span class="layer-order">2</span>
+              <span class="layer-name">chrome-headless</span>
+              <span class="layer-freq">REBUILD</span>
+            </div>
+            <div class="layer cached">
+              <span class="layer-order">1</span>
+              <span class="layer-name">steel-platform</span>
+              <span class="layer-freq">CACHED</span>
+            </div>
+            <div class="layer cached">
+              <span class="layer-order">0</span>
+              <span class="layer-name">debian-bookworm</span>
+              <span class="layer-freq">CACHED</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 5: Alloy Example ═══════════════════ -->
+  <div class="slide" data-slide="5">
+    <div class="slide-inner">
+      <h3>The Alloy</h3>
+      <h2>Dockerfile as Build Spec</h2>
+      <p style="margin-bottom: 0.8em;">A standard multi-stage Dockerfile with Steel label annotations. Works with <code>docker build</code> for local dev and with The Smelter for production.</p>
+      <div class="code-block"><span class="dim">FROM</span> debian:bookworm-slim <span class="dim">AS</span> <span class="gold">base_os</span>
+<span class="dim">LABEL</span> steel.layer=<span class="hot">"base-os"</span>
+<span class="dim">LABEL</span> steel.layer.order=<span class="hot">"0"</span>
+<span class="dim">RUN</span> apt-get update &amp;&amp; apt-get install -y ca-certificates curl
+
+<span class="dim">FROM</span> base_os <span class="dim">AS</span> <span class="gold">platform</span>
+<span class="dim">LABEL</span> steel.layer=<span class="hot">"platform"</span>
+<span class="dim">LABEL</span> steel.layer.order=<span class="hot">"1"</span>
+<span class="dim">COPY</span> steel-init /usr/local/bin/steel-init
+
+<span class="dim">FROM</span> platform <span class="dim">AS</span> <span class="gold">chrome</span>
+<span class="dim">LABEL</span> steel.layer=<span class="hot">"chrome"</span>
+<span class="dim">LABEL</span> steel.layer.order=<span class="hot">"2"</span>
+<span class="dim">RUN</span> apt-get install -y chromium
+
+<span class="dim">FROM</span> chrome <span class="dim">AS</span> <span class="gold">app</span>
+<span class="dim">LABEL</span> steel.layer=<span class="hot">"app"</span>
+<span class="dim">LABEL</span> steel.layer.order=<span class="hot">"3"</span>
+<span class="dim">COPY</span> steel-browser-server /usr/local/bin/
+
+<span class="dim">FROM</span> scratch <span class="dim">AS</span> <span class="gold">steel_release</span>
+<span class="dim">LABEL</span> steel.release=<span class="hot">"true"</span>
+<span class="dim">LABEL</span> steel.release.layers=<span class="hot">"base-os,platform,chrome,app"</span>
+<span class="dim">LABEL</span> steel.meta.vcpus=<span class="hot">"4"</span>
+<span class="dim">LABEL</span> steel.meta.memory_mb=<span class="hot">"4096"</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 6: Build Pipeline ═══════════════════ -->
+  <div class="slide" data-slide="6">
+    <div class="slide-inner">
+      <h3>Build Pipeline</h3>
+      <h2>Six Steps from Alloy to Reserve</h2>
+
+      <div class="pipeline">
+        <div class="pipe-step">
+          <div class="pipe-num">1</div>
+          <div class="pipe-title">Parse</div>
+          <div class="pipe-desc">Extract stages, labels, build graph from Dockerfile</div>
+        </div>
+        <div class="pipe-arrow">&rarr;</div>
+        <div class="pipe-step">
+          <div class="pipe-num">2</div>
+          <div class="pipe-title">Plan</div>
+          <div class="pipe-desc">Compute input hashes, check Reserve for cache hits</div>
+        </div>
+        <div class="pipe-arrow">&rarr;</div>
+        <div class="pipe-step">
+          <div class="pipe-num">3</div>
+          <div class="pipe-title">Build</div>
+          <div class="pipe-desc">BuildKit Solve() for each cache miss</div>
+        </div>
+        <div class="pipe-arrow">&rarr;</div>
+        <div class="pipe-step">
+          <div class="pipe-num">4</div>
+          <div class="pipe-title">Convert</div>
+          <div class="pipe-desc">ext4 + OCI tar, zstd compressed, in parallel</div>
+        </div>
+        <div class="pipe-arrow">&rarr;</div>
+        <div class="pipe-step">
+          <div class="pipe-num">5</div>
+          <div class="pipe-title">Publish</div>
+          <div class="pipe-desc">Both artifacts + metadata to Reserve</div>
+        </div>
+        <div class="pipe-arrow">&rarr;</div>
+        <div class="pipe-step">
+          <div class="pipe-num">6</div>
+          <div class="pipe-title">Manifest</div>
+          <div class="pipe-desc">Release manifest JSON stamped and stored</div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin: 1.5em auto;"></div>
+
+      <div class="two-col">
+        <div>
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.5em;">Content Addressing</p>
+          <div class="hash-box">
+            <div class="hash-label gold">Input Hash (cache key)</div>
+            <div class="hash-formula">SHA-256( parent_input_hash + stage_definition )</div>
+          </div>
+          <div class="hash-box">
+            <div class="hash-label molten">Output Hash (integrity)</div>
+            <div class="hash-formula">SHA-256( raw ext4 image bytes )</div>
+          </div>
+        </div>
+        <div>
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.5em;">Dual-Format Artifacts</p>
+          <table>
+            <tr><th>Format</th><th>Consumer</th></tr>
+            <tr><td><code>.ext4.zst</code></td><td>Microvisor deploy</td></tr>
+            <tr><td><code>.oci.tar.zst</code></td><td>BuildKit cache injection</td></tr>
+          </table>
+          <p class="dim" style="font-size: 0.85rem; margin-top: 0.6em;">Both produced in parallel from the same source directory. Each consumer pulls the format it needs.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 7: Architecture ═══════════════════ -->
+  <div class="slide" data-slide="7">
+    <div class="slide-inner">
+      <h3>Architecture</h3>
+      <h2>Components &amp; Abstraction Boundaries</h2>
+
+      <div class="arch-diagram">
+        <div class="arch-box">
+          <div class="arch-label">Dockerfile Parser</div>
+          <div class="arch-desc">Extracts stages, Steel labels, produces build graph</div>
+        </div>
+        <div class="arch-box">
+          <div class="arch-label">Build Orchestrator</div>
+          <div class="arch-desc">Walks graph, checks cache, delegates to BuildKit</div>
+        </div>
+        <div class="arch-box">
+          <div class="arch-label">Layer Converter</div>
+          <div class="arch-desc">Directory &rarr; ext4.zst + oci.tar.zst</div>
+        </div>
+      </div>
+
+      <div class="arch-row">
+        <div class="arch-box" style="border-color: var(--gold-dim);">
+          <div class="arch-label">BuildKit (gRPC)</div>
+          <div class="arch-desc">Executes stages in isolated containers. Accepts injected cache from parent layers.</div>
+        </div>
+        <div class="arch-box" style="border-color: var(--gold-dim);">
+          <div class="arch-label">fs-storage (client)</div>
+          <div class="arch-desc">Content-addressed store. Publish, pull, tag, diff, GC.</div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin: 1.2em auto;"></div>
+
+      <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.6em;">Three abstraction boundaries isolate future pivots:</p>
+      <table>
+        <tr><th>Interface</th><th>POC</th><th>Future</th></tr>
+        <tr><td><code>LayerFormat</code></td><td>zstd ext4 + OCI tar</td><td>squashfs, different compression</td></tr>
+        <tr><td><code>StoreClient</code></td><td>Local filesystem</td><td>HTTP/gRPC remote store</td></tr>
+        <tr><td><code>BuildEngine</code></td><td>BuildKit gRPC</td><td>Direct container exec, Firecracker builds</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 8: Deploy Path ═══════════════════ -->
+  <div class="slide" data-slide="8">
+    <div class="slide-inner">
+      <h3>Deploy Path</h3>
+      <h2>From Reserve to Running VM</h2>
+      <p style="margin-bottom: 1em;">Microvisor only imports the <strong>top layer</strong> — it contains the complete rootfs. Lower layers exist for caching and diffing.</p>
+
+      <div class="two-col-wide-left">
+        <div class="flow">
+          <div class="flow-node">
+            <div class="label">Release Manifest</div>
+            <div class="desc">Arrives by hash or tag resolution</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node">
+            <div class="label">Pull Top Layer</div>
+            <div class="desc"><code>.ext4.zst</code> from The Reserve</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node highlight">
+            <div class="label">Assay</div>
+            <div class="desc">Decompress, SHA-256 verify against manifest</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node">
+            <div class="label">Import to dm-thin</div>
+            <div class="desc">Stream into new thin volume</div>
+          </div>
+          <div class="flow-arrow">&#9660;</div>
+          <div class="flow-node highlight">
+            <div class="label">CoW Snapshot</div>
+            <div class="desc">Per-VM ephemeral snapshot &rarr; Firecracker O_DIRECT</div>
+          </div>
+        </div>
+
+        <div>
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.6em;">Key properties</p>
+          <ul>
+            <li>Layer import is a <strong>one-time cost</strong> per layer per host</li>
+            <li>Subsequent VM launches snapshot the existing thin volume</li>
+            <li>Integrity verified <strong>before</strong> writing to thin pool</li>
+            <li>Hash mismatch &rarr; reject, abort deploy</li>
+            <li>Tags enable promotion: <code>staging</code> &rarr; <code>production</code></li>
+          </ul>
+
+          <div class="divider" style="margin: 1.2em 0;"></div>
+
+          <p style="font-weight: 500; color: var(--text-bright); margin-bottom: 0.6em;">Why store all layers?</p>
+          <ul>
+            <li><span class="gold">Cache:</span> skip rebuilding unchanged layers</li>
+            <li><span class="gold">Diff:</span> see which component changed between releases</li>
+            <li><span class="gold">Sharing:</span> multiple workloads share base layers</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 9: Security ═══════════════════ -->
+  <div class="slide" data-slide="9">
+    <div class="slide-inner">
+      <h3>Security</h3>
+      <h2>Build, Store, Deploy</h2>
+
+      <div class="sec-grid">
+        <div class="sec-item">
+          <div class="sec-label">Isolated Builds</div>
+          <div class="sec-desc">BuildKit executes each RUN in a restricted container. The Smelter never executes Dockerfile instructions directly.</div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-label">Supply Chain Pinning</div>
+          <div class="sec-desc">FROM references resolve to registry digests, not mutable tags. Base image updates change the input hash and trigger rebuilds.</div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-label">Append-Only Store</div>
+          <div class="sec-desc">Published layers are immutable. Different content under an existing hash is rejected. Corruption detected by verify_store scans.</div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-label">Consumer-Side Verification</div>
+          <div class="sec-desc">Microvisor verifies SHA-256 of decompressed bytes against the manifest before writing to thin pool. No trust delegation.</div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-label">Build Provenance</div>
+          <div class="sec-desc">Every layer records: builder version, timestamp, build host, input manifest hash, parent hash, stage definition hash.</div>
+        </div>
+        <div class="sec-item">
+          <div class="sec-label">Hash Chain Integrity</div>
+          <div class="sec-desc">Each layer records its parent's hash. A change to any lower layer invalidates everything above it. No stale references possible.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 10: Performance Targets ═══════════════════ -->
+  <div class="slide" data-slide="10">
+    <div class="slide-inner">
+      <h3>Performance</h3>
+      <h2>Target Numbers</h2>
+
+      <table style="max-width: 700px;">
+        <tr><th>Operation</th><th>Target</th></tr>
+        <tr><td>Cache-hit decision (hash lookup)</td><td><code>&lt; 5 ms</code></td></tr>
+        <tr><td>Incremental rebuild (top layer only)</td><td><code>&lt; 30 s</code></td></tr>
+        <tr><td>Full cold rebuild (4-layer workload)</td><td><code>&lt; 5 min</code></td></tr>
+        <tr><td>Build diff (two manifests)</td><td><code>&lt; 100 ms</code></td></tr>
+        <tr><td>Store publish overhead (per layer)</td><td><code>&lt; 1 s</code> non-I/O</td></tr>
+      </table>
+
+      <div class="divider" style="margin: 1.5em auto;"></div>
+
+      <h2 style="font-size: 1.6rem;">Core Invariants</h2>
+      <ul style="max-width: 700px; margin-top: 0.5em;">
+        <li><span class="gold">Idempotent:</span> same spec + same inputs = same content addresses, every time</li>
+        <li><span class="gold">Content-addressed:</span> identity from cryptographic hash, not names or timestamps</li>
+        <li><span class="gold">Append-only:</span> published layers are immutable; deletion only via explicit GC</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ SLIDE 11: Closing ═══════════════════ -->
+  <div class="slide title-slide" data-slide="11">
+    <div class="slide-inner">
+      <div class="divider" style="margin-bottom: 2em;"></div>
+      <h2 style="font-size: 2.6rem; color: var(--gold); letter-spacing: 4px;">Same Alloy, Same Ingot.</h2>
+      <p style="font-size: 1.2rem; color: var(--text-dim); margin-top: 0.8em; margin-bottom: 2em;">Deterministic builds. Content-addressed layers. Zero wasted work.</p>
+
+      <div style="display: flex; gap: 40px; justify-content: center; margin-top: 1em;">
+        <div style="text-align: center;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; color: var(--gold-light);">&lt; 30s</div>
+          <div class="dim" style="font-size: 0.9rem; margin-top: 4px;">incremental rebuild</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; color: var(--gold-light);">&lt; 5ms</div>
+          <div class="dim" style="font-size: 0.9rem; margin-top: 4px;">cache decision</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; color: var(--gold-light);">SHA-256</div>
+          <div class="dim" style="font-size: 0.9rem; margin-top: 4px;">every artifact stamped</div>
+        </div>
+      </div>
+
+      <div class="divider" style="margin-top: 2em;"></div>
+      <p class="dim" style="font-size: 0.85rem; margin-top: 1em;">The Smelter &middot; Microvisor Build System</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Navigation ── -->
+<div class="nav">
+  <button class="nav-btn" id="prev-btn" aria-label="Previous slide">&#8592;</button>
+  <div class="nav-dots" id="nav-dots"></div>
+  <button class="nav-btn" id="next-btn" aria-label="Next slide">&#8594;</button>
+  <span class="slide-counter" id="counter"></span>
+</div>
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const dots = document.getElementById('nav-dots');
+  const counter = document.getElementById('counter');
+  const total = slides.length;
+  let current = 0;
+
+  // Build dot nav
+  for (let i = 0; i < total; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goTo(i));
+    dots.appendChild(dot);
+  }
+
+  function goTo(n) {
+    if (n < 0 || n >= total) return;
+    slides[current].classList.remove('active');
+    dots.children[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    dots.children[current].classList.add('active');
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+
+  function next() { goTo(current + 1); }
+  function prev() { goTo(current - 1); }
+
+  document.getElementById('next-btn').addEventListener('click', next);
+  document.getElementById('prev-btn').addEventListener('click', prev);
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(total - 1); }
+  });
+
+  // Swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+  });
+
+  goTo(0);
+})();
+</script>
+</body>
+</html>

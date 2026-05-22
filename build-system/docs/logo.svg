@@ -1,0 +1,259 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="crucible" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#555"/>
+      <stop offset="100%" stop-color="#1E1E1E"/>
+    </linearGradient>
+
+    <linearGradient id="streamGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFDD55"/>
+      <stop offset="15%" stop-color="#FFAA00"/>
+      <stop offset="50%" stop-color="#FF6B00"/>
+      <stop offset="100%" stop-color="#FF4500"/>
+    </linearGradient>
+
+    <linearGradient id="moldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3E3E3E"/>
+      <stop offset="100%" stop-color="#1A1A1A"/>
+    </linearGradient>
+
+    <linearGradient id="moltenFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFCC44"/>
+      <stop offset="40%" stop-color="#FF8800"/>
+      <stop offset="100%" stop-color="#FF4500"/>
+    </linearGradient>
+
+    <linearGradient id="ingotTop" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E8C85B"/>
+      <stop offset="100%" stop-color="#D4A840"/>
+    </linearGradient>
+
+    <linearGradient id="ingotFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C6952B"/>
+      <stop offset="100%" stop-color="#8B6914"/>
+    </linearGradient>
+
+    <linearGradient id="ingotSide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A07020"/>
+      <stop offset="100%" stop-color="#6B4A10"/>
+    </linearGradient>
+
+    <radialGradient id="heatGlow" cx="0.55" cy="0.35" r="0.55">
+      <stop offset="0%" stop-color="#FF8800" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#FF4500" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="pourGlow" cx="0.5" cy="0.3" r="0.5">
+      <stop offset="0%" stop-color="#FFAA00" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FF4500" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="wideGlow">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+
+    <filter id="shimmer">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="400" rx="24" fill="#0D0D0D"/>
+
+  <!-- Ambient heat glow -->
+  <ellipse cx="200" cy="180" rx="160" ry="140" fill="url(#heatGlow)" opacity="0.35"/>
+
+  <!-- ==================== TILTED CRUCIBLE (hand-drawn, no transform) ==================== -->
+  <!-- Crucible tilted ~28° clockwise. Left rim is high, right rim is the pour lip. -->
+
+  <!-- Crucible body -->
+  <path d="
+    M 92 88
+    L 232 138
+    L 242 242
+    Q 240 262 222 268
+    L 130 262
+    Q 112 258 115 238
+    Z
+  " fill="url(#crucible)" stroke="#5A5A5A" stroke-width="2"/>
+
+  <!-- Crucible rim — thick band along the top edge -->
+  <path d="
+    M 88 84
+    L 236 136
+    L 238 150
+    L 90 98
+    Z
+  " fill="#5A5A5A"/>
+
+  <!-- Rim highlight -->
+  <path d="
+    M 89 85
+    L 235 137
+    L 236 143
+    L 90 91
+    Z
+  " fill="#6E6E6E"/>
+
+  <!-- Molten metal inside (pools toward the pour lip, surface roughly level) -->
+  <!-- The metal surface is nearly horizontal, cutting across the tilted vessel -->
+  <path d="
+    M 108 100
+    L 236 143
+    L 238 155
+    Q 230 160 180 158
+    Q 130 155 115 140
+    Z
+  " fill="#FF6B00" opacity="0.85" filter="url(#glow)"/>
+
+  <!-- Brighter hot core on the surface -->
+  <path d="
+    M 140 120
+    L 234 146
+    L 235 152
+    Q 210 156 170 148
+    Q 142 138 140 125
+    Z
+  " fill="#FFAA00" opacity="0.6"/>
+
+  <!-- White-hot center -->
+  <ellipse cx="195" cy="143" rx="30" ry="5" fill="#FFCC44" opacity="0.4" transform="rotate(12, 195, 143)"/>
+
+  <!-- Left handle (high side) -->
+  <path d="
+    M 98 120
+    Q 68 110 65 135
+    Q 62 160 92 165
+  " fill="none" stroke="#5A5A5A" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Right handle (pour side) -->
+  <path d="
+    M 238 175
+    Q 268 168 272 192
+    Q 275 218 248 222
+  " fill="none" stroke="#5A5A5A" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Heat wisps rising from the open top -->
+  <path d="M 130 82 Q 124 58 131 38 Q 136 20 129 0" fill="none" stroke="#FF6B00" stroke-width="2.2" stroke-linecap="round" opacity="0.3" filter="url(#shimmer)"/>
+  <path d="M 160 72 Q 165 48 158 28 Q 153 10 160 -8" fill="none" stroke="#FFAA00" stroke-width="1.8" stroke-linecap="round" opacity="0.25" filter="url(#shimmer)"/>
+  <path d="M 110 92 Q 103 70 110 50 Q 115 32 108 14" fill="none" stroke="#FF6B00" stroke-width="2" stroke-linecap="round" opacity="0.22" filter="url(#shimmer)"/>
+
+  <!-- ==================== POUR STREAM ==================== -->
+  <!-- Flows directly from the pour lip at (236, 143) downward to the mold -->
+
+  <!-- Wide ambient glow around stream path -->
+  <ellipse cx="248" cy="230" rx="25" ry="70" fill="#FF6B00" opacity="0.12" filter="url(#wideGlow)"/>
+
+  <!-- Main stream — starts at the lip, arcs slightly outward, then falls -->
+  <path d="
+    M 236 143
+    Q 248 148 254 165
+    Q 258 190 256 220
+    Q 254 250 252 278
+  " fill="none" stroke="url(#streamGrad)" stroke-width="13" stroke-linecap="round" filter="url(#softGlow)"/>
+
+  <!-- Bright inner core -->
+  <path d="
+    M 237 146
+    Q 247 152 252 170
+    Q 255 195 254 225
+    Q 253 255 252 278
+  " fill="none" stroke="#FFCC44" stroke-width="4.5" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Splash where stream hits the mold -->
+  <ellipse cx="252" cy="283" rx="20" ry="7" fill="#FFAA00" opacity="0.65" filter="url(#glow)"/>
+  <ellipse cx="252" cy="282" rx="12" ry="4" fill="#FFDD55" opacity="0.45"/>
+
+  <!-- Splash droplets -->
+  <circle cx="236" cy="276" r="2.5" fill="#FFAA00" opacity="0.55" filter="url(#glow)"/>
+  <circle cx="268" cy="274" r="2" fill="#FF8800" opacity="0.45" filter="url(#glow)"/>
+  <circle cx="232" cy="269" r="1.5" fill="#FFCC44" opacity="0.35"/>
+  <circle cx="272" cy="268" r="1.8" fill="#FF6B00" opacity="0.35"/>
+
+  <!-- ==================== INGOT MOLD ==================== -->
+
+  <!-- Mold outer walls -->
+  <path d="
+    M 205 280
+    L 195 335
+    L 310 335
+    L 300 280
+    Z
+  " fill="url(#moldGrad)" stroke="#4A4A4A" stroke-width="1.5"/>
+
+  <!-- Mold left wall thickness -->
+  <path d="M 205 280 L 195 335 L 200 335 L 210 280 Z" fill="#2A2A2A"/>
+
+  <!-- Mold right wall thickness -->
+  <path d="M 300 280 L 310 335 L 305 335 L 295 280 Z" fill="#2A2A2A"/>
+
+  <!-- Mold front face -->
+  <path d="M 195 335 L 310 335 L 306 340 L 199 340 Z" fill="#1A1A1A" stroke="#333" stroke-width="1"/>
+
+  <!-- Mold rim highlight -->
+  <path d="M 206 280 L 299 280 L 297 283 L 208 283 Z" fill="#555"/>
+
+  <!-- Molten metal filling the mold -->
+  <path d="
+    M 210 285
+    L 212 330
+    L 294 330
+    L 296 285
+    Z
+  " fill="url(#moltenFill)" opacity="0.8"/>
+
+  <!-- Bright surface of filling metal -->
+  <ellipse cx="253" cy="287" rx="40" ry="5" fill="#FF8800" opacity="0.5" filter="url(#glow)"/>
+
+  <!-- ==================== FINISHED INGOT ==================== -->
+
+  <!-- Ingot top face -->
+  <path d="
+    M 55 305
+    L 150 305
+    L 144 313
+    L 61 313
+    Z
+  " fill="url(#ingotTop)" stroke="#8B6914" stroke-width="1"/>
+
+  <!-- Ingot front face -->
+  <path d="
+    M 61 313
+    L 144 313
+    L 140 340
+    L 65 340
+    Z
+  " fill="url(#ingotFront)" stroke="#8B6914" stroke-width="1"/>
+
+  <!-- Ingot right side -->
+  <path d="
+    M 144 313
+    L 150 305
+    L 146 332
+    L 140 340
+    Z
+  " fill="url(#ingotSide)" stroke="#8B6914" stroke-width="1"/>
+
+  <!-- Content-hash stamp -->
+  <text x="103" y="332" font-family="monospace" font-size="11" font-weight="bold" fill="#6B4A10" text-anchor="middle" opacity="0.5">a3f8</text>
+
+  <!-- ==================== WORDMARK ==================== -->
+  <text x="200" y="378" font-family="'Georgia', 'Times New Roman', serif" font-size="28" font-weight="bold" fill="#C6952B" text-anchor="middle" letter-spacing="6">THE SMELTER</text>
+  <line x1="110" y1="385" x2="290" y2="385" stroke="#C6952B" stroke-width="1" opacity="0.4"/>
+</svg>
