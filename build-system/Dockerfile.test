@@ -1,0 +1,15 @@
+FROM alpine:latest AS base
+LABEL steel.layer="base"
+LABEL steel.layer.order="0"
+RUN apk add --no-cache bash
+
+FROM base AS app
+LABEL steel.layer="app"
+LABEL steel.layer.order="1"
+RUN echo "hello microvisor" > /hello.txt
+
+FROM scratch AS release
+LABEL steel.release="true"
+LABEL steel.release.layers="base,app"
+LABEL steel.meta.vcpus="2"
+LABEL steel.meta.memory_mb="512"
