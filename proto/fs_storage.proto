@@ -1,0 +1,131 @@
+syntax = "proto3";
+package fs_storage.v1;
+
+service LayerStoreService {
+    // Input Hash Index
+    rpc ResolveInputHash(ResolveInputHashRequest) returns (ResolveInputHashResponse);
+    
+    // Blob Operations
+    rpc HasLayer(HasLayerRequest) returns (HasLayerResponse);
+    
+    // Server streaming for efficient zero-memory-buffer artifact pulls
+    rpc PullLayer(PullLayerRequest) returns (stream PullLayerResponse);
+    
+    // Client streaming for artifact ingestion.
+    rpc PublishLayer(stream PublishLayerRequest) returns (PublishLayerResponse);
+
+    // Manifests
+    rpc PublishManifest(PublishManifestRequest) returns (PublishManifestResponse);
+    rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
+    // Catalog & Tags
+    rpc ListBuilds(ListBuildsRequest) returns (ListBuildsResponse);
+    rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+    rpc GetTag(GetTagRequest) returns (GetTagResponse);
+}
+
+enum ArtifactFormat {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_DEPLOY = 1;      // ext4.zst
+    FORMAT_BUILD_CACHE = 2; // oci.tar.zst
+}
+
+message LayerMeta {
+    string input_hash = 1;
+    string content_hash = 2;
+    optional string parent_input_hash = 3;
+    uint64 uncompressed_size = 4;
+    uint64 compressed_size_deploy = 5;
+    uint64 compressed_size_cache = 6;
+    string builder_version = 7;
+    uint64 build_timestamp = 8;
+    string build_host = 9;
+    string stage_definition_hash = 10;
+    string dockerfile_hash = 11;
+}
+
+message ManifestLayer {
+    string name = 1;
+    uint32 order = 2;
+    string input_hash = 3;
+    string content_hash = 4;
+    uint64 size_bytes = 5;
+    uint64 size_compressed_bytes = 6;
+    optional string parent_input_hash = 7;
+}
+
+message BuildMetadata {
+    string dockerfile_hash = 1;
+    uint64 build_timestamp = 2;
+    string builder_version = 3;
+    string build_host = 4;
+}
+
+message ReleaseManifest {
+    string schema_version = 1;
+    string manifest_id = 2;
+    BuildMetadata build_metadata = 3;
+    repeated ManifestLayer layers = 4;
+    map<string, string> workload_metadata = 5;
+}
+
+message ResolveInputHashRequest { string input_hash = 1; }
+message ResolveInputHashResponse { optional string content_hash = 1; }
+
+message HasLayerRequest { string content_hash = 1; }
+message HasLayerResponse { bool exists = 1; }
+
+message PullLayerRequest {
+    string content_hash = 1;
+    ArtifactFormat format = 2;
+}
+message PullLayerResponse {
+    bytes chunk = 1;
+}
+
+message PublishLayerRequest {
+    oneof payload {
+        LayerMeta meta = 1;
+        bytes deploy_chunk = 2;
+        bytes cache_chunk = 3;
+    }
+}
+message PublishLayerResponse {
+    string content_hash = 1;
+}
+
+message PublishManifestRequest { ReleaseManifest manifest = 1; }
+message PublishManifestResponse { string manifest_hash = 1; }
+
+message GetManifestRequest { string manifest_hash = 1; }
+message GetManifestResponse { ReleaseManifest manifest = 1; }
+
+message ListBuildsRequest {
+    optional string tag = 1;
+    optional string release_name_prefix = 2;
+    optional string layer_hash = 3;
+    optional uint64 from_timestamp = 4;
+    optional uint64 to_timestamp = 5;
+}
+
+message BuildCatalogEntry {
+    string build_id = 1;
+    string release_name = 2;
+    string manifest_hash = 3;
+    uint64 build_timestamp = 4;
+    string spec_hash = 5;
+    repeated string layers = 6;
+}
+
+message ListBuildsResponse {
+    repeated BuildCatalogEntry entries = 1;
+}
+
+message CreateTagRequest {
+    string name = 1;
+    string manifest_hash = 2;
+}
+message CreateTagResponse {}
+
+message GetTagRequest { string name = 1; }
+message GetTagResponse { string manifest_hash = 1; }
